@@ -25,9 +25,9 @@ class Player:
         if keys[pygame.K_d] or keys[pygame.K_RIGHT]:
             self.velocity_x = self.speed
         if keys[pygame.K_w] or keys[pygame.K_UP]:
-            self.velocity_y = -self.speed
+            self.velocity_y = self.speed      # Up = world Y increases
         if keys[pygame.K_s] or keys[pygame.K_DOWN]:
-            self.velocity_y = self.speed
+            self.velocity_y = -self.speed     # Down = world Y decreases
 
         self.x += self.velocity_x * dt
         self.y += self.velocity_y * dt

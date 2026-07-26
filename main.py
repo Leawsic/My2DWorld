@@ -11,8 +11,8 @@ from world import World, GRASS, DIRT, STONE, BEDROCK
 from player import Player
 
 # Constants
-SCREEN_WIDTH = 1024
-SCREEN_HEIGHT = 768
+INITIAL_WIDTH = 1024
+INITIAL_HEIGHT = 768
 BLOCK_SIZE = 32  # pixels per block
 FPS = 60
 VIEW_DISTANCE_CHUNKS = 8  # chunks loaded in each direction
@@ -68,7 +68,14 @@ def get_texture_or_fallback(textures: dict, block_type: str) -> pygame.Surface:
 def main():
     """Main game entry point."""
     pygame.init()
-    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+    screen_width = INITIAL_WIDTH
+    screen_height = INITIAL_HEIGHT
+    is_fullscreen = False
+
+    screen = pygame.display.set_mode(
+        (screen_width, screen_height),
+        pygame.RESIZABLE
+    )
     pygame.display.set_caption("My2DWorld - Infinite Terrain Explorer")
     clock = pygame.time.Clock()
     font = pygame.font.SysFont("Arial", 14)
@@ -83,9 +90,7 @@ def main():
     start_surface = world.get_surface_height(0)
     player = Player(start_x=0, start_y=start_surface + 3)
 
-    # Initial view update
-    world.update_view(0)
-    # Update view based on player start position
+    # Initial view update based on player start position
     world.update_view(player.x)
 
     running = True
@@ -99,11 +104,34 @@ def main():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+            elif event.type == pygame.VIDEORESIZE and not is_fullscreen:
+                # Window resized by user dragging
+                screen_width, screen_height = event.w, event.h
+                screen = pygame.display.set_mode(
+                    (screen_width, screen_height),
+                    pygame.RESIZABLE
+                )
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_F3:
                     show_debug = not show_debug
                 elif event.key == pygame.K_ESCAPE:
                     running = False
+                elif event.key == pygame.K_F11:
+                    # Toggle fullscreen
+                    is_fullscreen = not is_fullscreen
+                    if is_fullscreen:
+                        screen = pygame.display.set_mode(
+                            (0, 0),
+                            pygame.FULLSCREEN
+                        )
+                        screen_width, screen_height = screen.get_size()
+                    else:
+                        screen_width = INITIAL_WIDTH
+                        screen_height = INITIAL_HEIGHT
+                        screen = pygame.display.set_mode(
+                            (screen_width, screen_height),
+                            pygame.RESIZABLE
+                        )
 
         # Update player
         player.update(keys, dt)
@@ -112,7 +140,7 @@ def main():
         # Update world view based on player/camera position
         world.update_view(px)
 
-        # Camera follows player (camera_y is world y of screen center)
+        # Camera follows player
         camera_x = px
         camera_y = py
 
@@ -127,7 +155,7 @@ def main():
 
         world.render_blocks(
             camera_x, camera_y,
-            SCREEN_WIDTH, SCREEN_HEIGHT,
+            screen_width, screen_height,
             BLOCK_SIZE,
             draw_block
         )
@@ -138,9 +166,11 @@ def main():
                 f"My2DWorld - FPS: {clock.get_fps():.0f}",
                 f"Player: ({px:.1f}, {py:.1f})",
                 f"Camera: ({camera_x:.1f}, {camera_y:.1f})",
+                f"Window: {screen_width}x{screen_height}" +
+                (" (FS)" if is_fullscreen else ""),
                 f"Chunks loaded: {len(world.chunks)}",
                 f"Textures loaded: {len(textures)}",
-                "WASD/Arrows: Move | F3: Toggle debug | ESC: Exit",
+                "WASD/Arrows: Move | F3: Debug | F11: Fullscreen | ESC: Exit",
             ]
             for i, line in enumerate(lines):
                 text_surf = font.render(line, True, (255, 255, 255))

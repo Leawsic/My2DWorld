@@ -9,15 +9,20 @@ import math
 # Block types (matching texture filenames)
 GRASS = "grass_block_side"
 DIRT = "dirt"
-STONE = "iron_block"
+STONE = "iron_ore"            # Uses iron_ore texture as stone look
 BEDROCK = "bedrock"
+
+# Reserve texture keys for future mineral generation (currently unused)
+# IRON_BLOCK = "iron_block"           # iron_block.png
+# DEEPSLATE_IRON_ORE = "deepslate_iron_ore"  # deepslate_iron_ore.png
+# RAW_IRON_BLOCK = "raw_iron_block"   # raw_iron_block.png
 
 # Chunk size in blocks (columns per chunk)
 CHUNK_SIZE = 16
 
 # Terrain heights (how many layers from surface down)
 GRASS_DEPTH = 3
-DIRT_DEPTH = 12
+DIRT_DEPTH = 15
 BEDROCK_THICKNESS = 2
 
 
@@ -30,7 +35,7 @@ def hash_noise(x: int) -> float:
 
 
 def smooth_noise(x: float) -> float:
-    """Value noise with cosine interpolation between integer points."""
+    """Value noise with smoothstep interpolation between integer points."""
     ix = math.floor(x)
     fx = x - ix
     # smoothstep interpolation
@@ -46,21 +51,21 @@ def terrain_height(x: int) -> int:
     Returns the Y level of the surface (highest solid block).
     World Y increases upward.
     """
-    # Multi-octave sine-based noise for large-scale terrain
+    # Multi-octave sine-based noise for gentle, realistic terrain
     octaves = [
-        (0.005, 30.0),   # low freq, large amplitude → mountains/hills
-        (0.02, 15.0),    # mid freq
-        (0.05, 6.0),     # high freq → small bumps
+        (0.008, 12.0),   # low freq → broad hills
+        (0.025, 6.0),    # mid freq → rolling terrain
+        (0.06, 2.5),     # high freq → small bumps
     ]
     y = 0.0
     for freq, amp in octaves:
-        y += math.sin(x * freq + math.pi * hash_noise(int(x * freq * 100))) * amp
+        y += math.sin(x * freq) * amp
 
-    # Use value noise for more organic variation
-    noise_val = smooth_noise(x * 0.01) * 20 + smooth_noise(x * 0.03) * 8
+    # Gentle value noise for organic variation
+    noise_val = smooth_noise(x * 0.008) * 8 + smooth_noise(x * 0.03) * 3
 
     y += noise_val
-    y += 40  # base height (offset)
+    y += 45  # base height (offset)
 
     return max(1, int(round(y)))
 
@@ -76,9 +81,11 @@ def get_block_type(x: int, y: int, surface_y: int):
         return BEDROCK
     if y == surface_y:
         return GRASS
-    if y > surface_y - GRASS_DEPTH:
+    # Each column gets a variable grass depth: 2~5 layers based on position
+    grass_depth = 2 + int(hash_noise(x + 9999) * 4)
+    if y > surface_y - grass_depth:
         return GRASS
-    if y > surface_y - GRASS_DEPTH - DIRT_DEPTH:
+    if y > surface_y - grass_depth - DIRT_DEPTH:
         return DIRT
     return STONE
 
@@ -202,8 +209,8 @@ class World:
         world_top = camera_y + half_h + 1      # highest world Y visible
         world_bottom = camera_y - half_h - 1   # lowest world Y visible
 
-        # Round to integer block coordinates
-        wx_start = max(0, int(math.floor(world_left)))
+        # Round to integer block coordinates (allow negative x)
+        wx_start = int(math.floor(world_left))
         wx_end = int(math.ceil(world_right))
         wy_bottom = max(1, int(math.floor(world_bottom)))
         wy_top = int(math.ceil(world_top))
@@ -236,8 +243,6 @@ class World:
                     bt = chunk.get_block(wx, wy)
                     if bt:
                         # Convert world coords to screen coords
-                        # sx = (wx - camera_x) * block_size + screen_width // 2
-                        # sy_px = (camera_y - wy) * block_size + screen_height // 2
                         sx = (wx - camera_x) * block_size + cx_off
                         sy_px = (camera_y - wy) * block_size + cy_off
 
