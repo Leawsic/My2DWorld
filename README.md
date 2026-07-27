@@ -8,7 +8,7 @@ python main.py
 
 ## 🎨 纹理资源声明
 
-本游戏使用的纹理来源于 **Faithful 32x** 资源包通过图片处理手段制作详见process.py。
+本游戏使用的纹理来源于 **Faithful 32x** 资源包通过图片处理手段制作详见/other_codes/process.py。
 
 - 纹理部分遵循 **FAITHFUL LICENSE**，**严禁商用**。
 - 使用须署名并链接至：https://faithfulpack.net/
