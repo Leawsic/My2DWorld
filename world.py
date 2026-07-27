@@ -9,19 +9,21 @@ import math
 # Block types (matching texture filenames)
 GRASS = "grass_block_side"
 DIRT = "dirt"
-STONE = "iron_ore"            # Uses iron_ore texture as stone look
+STONE = "stone"               # Uses new stone.png texture
+COBBLESTONE = "cobblestone"   # cobblestone.png
+MOSSY_COBBLESTONE = "mossy_cobblestone"  # mossy_cobblestone.png
 BEDROCK = "bedrock"
 
 # Reserve texture keys for future mineral generation (currently unused)
-# IRON_BLOCK = "iron_block"           # iron_block.png
-# DEEPSLATE_IRON_ORE = "deepslate_iron_ore"  # deepslate_iron_ore.png
-# RAW_IRON_BLOCK = "raw_iron_block"   # raw_iron_block.png
+# IRON_BLOCK = "iron_block"
+# DEEPSLATE_IRON_ORE = "deepslate_iron_ore"
+# RAW_IRON_BLOCK = "raw_iron_block"
+# etc.
 
 # Chunk size in blocks (columns per chunk)
 CHUNK_SIZE = 16
 
 # Terrain heights (how many layers from surface down)
-GRASS_DEPTH = 3
 DIRT_DEPTH = 15
 BEDROCK_THICKNESS = 2
 
@@ -70,6 +72,17 @@ def terrain_height(x: int) -> int:
     return max(1, int(round(y)))
 
 
+def get_stone_variant(x: int, y: int) -> str:
+    """Return a random stone variant based on position.
+    ~85% stone, ~10% cobblestone, ~5% mossy_cobblestone."""
+    h = hash_noise(x * 131 + y * 2837)
+    if h < 0.05:
+        return MOSSY_COBBLESTONE
+    elif h < 0.15:
+        return COBBLESTONE
+    return STONE
+
+
 def get_block_type(x: int, y: int, surface_y: int):
     """Determine the block type at a given (x, y) world coordinate.
     y=1 is the bottom of the world (bedrock).
@@ -87,7 +100,7 @@ def get_block_type(x: int, y: int, surface_y: int):
         return GRASS
     if y > surface_y - grass_depth - DIRT_DEPTH:
         return DIRT
-    return STONE
+    return get_stone_variant(x, y)
 
 
 class Chunk:

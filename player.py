@@ -11,7 +11,7 @@ class Player:
     def __init__(self, start_x: int = 0, start_y: int = 50):
         self.x = float(start_x)
         self.y = float(start_y)
-        self.speed = 4.0
+        self.speed = 1.35  # 1/3 of original 4.0
         self.velocity_x = 0.0
         self.velocity_y = 0.0
 

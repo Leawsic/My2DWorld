@@ -3,11 +3,12 @@ My2DWorld - A 2D Minecraft-style infinite terrain explorer.
 Uses pygame for rendering and hand-crafted noise for terrain generation.
 """
 
+import math
 import os
 import sys
 import pygame
 
-from world import World, GRASS, DIRT, STONE, BEDROCK
+from world import World, GRASS, DIRT, STONE, COBBLESTONE, MOSSY_COBBLESTONE, BEDROCK
 from player import Player
 
 # Constants
@@ -23,11 +24,27 @@ COLOR_MAP = {
     GRASS: (87, 171, 60),
     DIRT: (130, 96, 52),
     STONE: (120, 120, 120),
+    COBBLESTONE: (100, 100, 100),
+    MOSSY_COBBLESTONE: (90, 110, 90),
     BEDROCK: (50, 50, 50),
+}
+
+# Block display names (Chinese)
+BLOCK_NAMES = {
+    GRASS: "草方块",
+    DIRT: "泥土",
+    STONE: "石头",
+    COBBLESTONE: "圆石",
+    MOSSY_COBBLESTONE: "苔石",
+    BEDROCK: "基岩",
 }
 
 # Zoom limits
 ZOOM_FACTOR = 1.15
+
+# Highlight color for hovered block
+HIGHLIGHT_COLOR = (255, 255, 255)  # white
+HIGHLIGHT_WIDTH = 2
 
 
 def load_textures(tex_dir: str = "image/block") -> dict:
@@ -67,6 +84,11 @@ def get_texture_or_fallback(textures: dict, block_type: str,
     return surf
 
 
+def get_block_name(block_type: str) -> str:
+    """Get the display name for a block type."""
+    return BLOCK_NAMES.get(block_type, block_type)
+
+
 def main():
     """Main game entry point."""
     pygame.init()
@@ -81,6 +103,8 @@ def main():
     pygame.display.set_caption("My2DWorld - Infinite Terrain Explorer")
     clock = pygame.time.Clock()
     font = pygame.font.SysFont("Arial", 14)
+    # Use a larger font for the block name display at top-center
+    name_font = pygame.font.SysFont("Arial", 20)
 
     # Load textures
     print("Loading textures...")
@@ -112,6 +136,7 @@ def main():
         dt = clock.tick(FPS) / 16.667  # normalize to ~60 FPS
         keys = pygame.key.get_pressed()
         mouse_buttons = pygame.mouse.get_pressed()
+        mx, my = pygame.mouse.get_pos()
 
         # Event handling
         for event in pygame.event.get():
@@ -164,16 +189,14 @@ def main():
             if not is_rmb_dragging:
                 # Start drag
                 is_rmb_dragging = True
-                rmb_drag_start_mouse = pygame.mouse.get_pos()
+                rmb_drag_start_mouse = (mx, my)
                 rmb_drag_start_offset = (camera_offset_x, camera_offset_y)
             else:
                 # Continue drag
-                mx, my = pygame.mouse.get_pos()
                 sx0, sy0 = rmb_drag_start_mouse
                 dx_px = mx - sx0
                 dy_px = my - sy0
                 # Convert screen pixel delta to world coordinate delta
-                # Note: Y is inverted (screen down = world down)
                 camera_offset_x = rmb_drag_start_offset[0] - dx_px / block_size
                 camera_offset_y = rmb_drag_start_offset[1] + dy_px / block_size
         else:
@@ -193,6 +216,27 @@ def main():
         camera_x = adjusted_cam_x
         camera_y = py + camera_offset_y
 
+        # --- Calculate hovered block under mouse ---
+        hovered_block = None
+        hovered_wx = 0
+        hovered_wy = 0
+        hovered_sx = 0
+        hovered_sy = 0
+        # Convert mouse screen coords to world coords
+        world_mx = camera_x + (mx - screen_width / 2) / block_size
+        world_my = camera_y - (my - screen_height / 2) / block_size
+        wx = int(math.floor(world_mx))
+        wy = int(math.floor(world_my))
+        if world_my >= 1:
+            bt = world.get_block(wx, wy)
+            if bt:
+                hovered_block = bt
+                hovered_wx = wx
+                hovered_wy = wy
+                # Compute screen position for border
+                hovered_sx = (wx - camera_x) * block_size + screen_width // 2
+                hovered_sy = (camera_y - wy) * block_size + screen_height // 2
+
         # --- RENDER ---
         screen.fill((135, 206, 235))  # sky blue
 
@@ -208,13 +252,36 @@ def main():
             draw_block
         )
 
+        # Draw highlight border on hovered block
+        if hovered_block:
+            pygame.draw.rect(
+                screen, HIGHLIGHT_COLOR,
+                (hovered_sx, hovered_sy, block_size, block_size),
+                HIGHLIGHT_WIDTH
+            )
+
+        # Draw block name at top-center of screen
+        if hovered_block:
+            name = get_block_name(hovered_block)
+            name_surf = name_font.render(name, True, (255, 255, 255))
+            shadow_surf = name_font.render(name, True, (0, 0, 0))
+            # Center horizontally at top
+            nx = (screen_width - name_surf.get_width()) // 2
+            ny = 10  # 10px from top
+            screen.blit(shadow_surf, (nx + 1, ny + 1))
+            screen.blit(name_surf, (nx, ny))
+
         # Debug info
         if show_debug:
             zoom_pct = int(block_size / DEFAULT_BLOCK_SIZE * 100)
+            hover_info = ""
+            if hovered_block:
+                hover_info = f" | Hover: ({hovered_wx}, {hovered_wy}) {get_block_name(hovered_block)}"
             lines = [
                 f"My2DWorld - FPS: {clock.get_fps():.0f}",
                 f"Player: ({px:.1f}, {py:.1f})",
                 f"Camera: ({camera_x:.1f}, {camera_y:.1f})",
+                f"Mouse: ({mx},{my}) → World: ({wx},{wy}){hover_info}",
                 f"Block size: {block_size}px ({zoom_pct}%)",
                 f"Window: {screen_width}x{screen_height}" +
                 (" (FS)" if is_fullscreen else ""),
