@@ -32,3 +32,5 @@ python main.py
 - [Minecraft](https://www.minecraft.net/) – 灵感来源
 
 ---
+
+免责声明：部分纹理素材来源于 Pixabay（https://pixabay.com），游戏内使用的 Pixabay 图片均经过修改，并已整合进游戏逻辑，未以独立形式分发。
