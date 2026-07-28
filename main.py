@@ -3,6 +3,7 @@ My2DWorld - A 2D Minecraft-style infinite terrain explorer.
 Uses pygame for rendering and hand-crafted noise for terrain generation.
 """
 
+import json
 import math
 import os
 import sys
@@ -19,32 +20,30 @@ MIN_BLOCK_SIZE = 32      # cannot zoom out further than default
 FPS = 60
 VIEW_DISTANCE_CHUNKS = 8  # chunks loaded in each direction
 
-# Colors (fallback if texture missing)
-COLOR_MAP = {
-    GRASS: (87, 171, 60),
-    DIRT: (130, 96, 52),
-    STONE: (120, 120, 120),
-    COBBLESTONE: (100, 100, 100),
-    MOSSY_COBBLESTONE: (90, 110, 90),
-    BEDROCK: (50, 50, 50),
-}
-
-# Block display names (Chinese)
-BLOCK_NAMES = {
-    GRASS: "草方块",
-    DIRT: "泥土",
-    STONE: "石头",
-    COBBLESTONE: "圆石",
-    MOSSY_COBBLESTONE: "苔石",
-    BEDROCK: "基岩",
-}
-
 # Zoom limits
 ZOOM_FACTOR = 1.15
 
 # Highlight color for hovered block
 HIGHLIGHT_COLOR = (255, 255, 255)  # white
 HIGHLIGHT_WIDTH = 2
+
+# Config paths
+FONT_PATH = "fonts/LXGWWenKai-Regular.ttf"
+BLOCK_CONFIG_PATH = "config/block.json"
+TRANSLATE_CONFIG_PATH = "config/translate.json"
+
+
+def load_json(path: str):
+    """Load a JSON file and return its contents."""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        print(f"Warning: config file '{path}' not found")
+        return {}
+    except json.JSONDecodeError as e:
+        print(f"Warning: failed to parse '{path}': {e}")
+        return {}
 
 
 def load_textures(tex_dir: str = "image/block") -> dict:
@@ -69,14 +68,15 @@ def load_textures(tex_dir: str = "image/block") -> dict:
 
 
 def get_texture_or_fallback(textures: dict, block_type: str,
-                            block_size: int) -> pygame.Surface:
+                            block_size: int, color_map: dict) -> pygame.Surface:
     """Get a texture scaled to block_size, or create a colored fallback."""
     if block_type in textures:
         raw = textures[block_type]
         return pygame.transform.scale(raw, (block_size, block_size))
 
     # Create a fallback colored surface
-    color = COLOR_MAP.get(block_type, (200, 0, 200))  # magenta for unknown
+    info = color_map.get(block_type, {})
+    color = info.get("color", [200, 0, 200]) if isinstance(info, dict) else (200, 0, 200)
     surf = pygame.Surface((block_size, block_size))
     surf.fill(color)
     # Draw a border to distinguish blocks
@@ -84,14 +84,32 @@ def get_texture_or_fallback(textures: dict, block_type: str,
     return surf
 
 
-def get_block_name(block_type: str) -> str:
-    """Get the display name for a block type."""
-    return BLOCK_NAMES.get(block_type, block_type)
-
-
 def main():
     """Main game entry point."""
     pygame.init()
+
+    # Load configs
+    print("Loading configs...")
+    block_config = load_json(BLOCK_CONFIG_PATH)
+    translate_config = load_json(TRANSLATE_CONFIG_PATH)
+    print(f"  block.json: {len(block_config)} block types")
+    print(f"  translate.json loaded")
+
+    # Build block name map from translation config
+    block_names = translate_config.get("blocks", {})
+
+    # Build color map from block config
+    color_map = {}
+    for key, info in block_config.items():
+        if isinstance(info, dict) and "color" in info:
+            color_map[key] = info
+
+    # GUI translations
+    gui_text = translate_config.get("gui", {})
+    window_title = gui_text.get("window_title", "My2DWorld")
+    controls_hint = gui_text.get("controls_hint",
+        "WASD: Move | Scroll: Zoom | RMB: Pan | F3: Debug | F11: FS | ESC: Exit")
+
     screen_width = INITIAL_WIDTH
     screen_height = INITIAL_HEIGHT
     is_fullscreen = False
@@ -100,11 +118,18 @@ def main():
         (screen_width, screen_height),
         pygame.RESIZABLE
     )
-    pygame.display.set_caption("My2DWorld - Infinite Terrain Explorer")
+    pygame.display.set_caption(window_title)
     clock = pygame.time.Clock()
-    font = pygame.font.SysFont("Arial", 14)
-    # Use a larger font for the block name display at top-center
-    name_font = pygame.font.SysFont("Arial", 20)
+
+    # Load font from file
+    if os.path.isfile(FONT_PATH):
+        debug_font = pygame.font.Font(FONT_PATH, 14)
+        name_font = pygame.font.Font(FONT_PATH, 20)
+        print(f"  Loaded font: {FONT_PATH}")
+    else:
+        debug_font = pygame.font.SysFont("Arial", 14)
+        name_font = pygame.font.SysFont("Arial", 20)
+        print(f"  Warning: font '{FONT_PATH}' not found, using Arial fallback")
 
     # Load textures
     print("Loading textures...")
@@ -223,8 +248,11 @@ def main():
         hovered_sx = 0
         hovered_sy = 0
         # Convert mouse screen coords to world coords
-        world_mx = camera_x + (mx - screen_width / 2) / block_size
-        world_my = camera_y - (my - screen_height / 2) / block_size
+        # Use integer division to stay aligned with render_blocks in world.py
+        cx_off = screen_width // 2
+        cy_off = screen_height // 2
+        world_mx = camera_x + (mx - cx_off) / block_size
+        world_my = camera_y - (my - cy_off) / block_size
         wx = int(math.floor(world_mx))
         wy = int(math.floor(world_my))
         if world_my >= 1:
@@ -233,16 +261,16 @@ def main():
                 hovered_block = bt
                 hovered_wx = wx
                 hovered_wy = wy
-                # Compute screen position for border
-                hovered_sx = (wx - camera_x) * block_size + screen_width // 2
-                hovered_sy = (camera_y - wy) * block_size + screen_height // 2
+                # Compute screen position for border (same formula as render_blocks)
+                hovered_sx = (wx - camera_x) * block_size + cx_off
+                hovered_sy = (camera_y - wy) * block_size + cy_off
 
         # --- RENDER ---
         screen.fill((135, 206, 235))  # sky blue
 
         # Render blocks
         def draw_block(sx, sy, block_type):
-            tex = get_texture_or_fallback(textures, block_type, block_size)
+            tex = get_texture_or_fallback(textures, block_type, block_size, color_map)
             screen.blit(tex, (sx, sy))
 
         world.render_blocks(
@@ -262,7 +290,7 @@ def main():
 
         # Draw block name at top-center of screen
         if hovered_block:
-            name = get_block_name(hovered_block)
+            name = block_names.get(hovered_block, hovered_block)
             name_surf = name_font.render(name, True, (255, 255, 255))
             shadow_surf = name_font.render(name, True, (0, 0, 0))
             # Center horizontally at top
@@ -276,22 +304,23 @@ def main():
             zoom_pct = int(block_size / DEFAULT_BLOCK_SIZE * 100)
             hover_info = ""
             if hovered_block:
-                hover_info = f" | Hover: ({hovered_wx}, {hovered_wy}) {get_block_name(hovered_block)}"
+                name = block_names.get(hovered_block, hovered_block)
+                hover_info = f" | 悬停: ({hovered_wx}, {hovered_wy}) {name}"
             lines = [
                 f"My2DWorld - FPS: {clock.get_fps():.0f}",
-                f"Player: ({px:.1f}, {py:.1f})",
-                f"Camera: ({camera_x:.1f}, {camera_y:.1f})",
-                f"Mouse: ({mx},{my}) → World: ({wx},{wy}){hover_info}",
-                f"Block size: {block_size}px ({zoom_pct}%)",
-                f"Window: {screen_width}x{screen_height}" +
-                (" (FS)" if is_fullscreen else ""),
-                f"Chunks loaded: {len(world.chunks)}",
-                f"Textures loaded: {len(textures)}",
-                "WASD: Move | Scroll: Zoom | RMB: Pan | F3: Debug | F11: FS | ESC: Exit",
+                f"玩家: ({px:.1f}, {py:.1f})",
+                f"相机: ({camera_x:.1f}, {camera_y:.1f})",
+                f"鼠标: ({mx},{my}) → 世界: ({wx},{wy}){hover_info}",
+                f"方块大小: {block_size}px ({zoom_pct}%)",
+                f"窗口: {screen_width}x{screen_height}" +
+                (" (全屏)" if is_fullscreen else ""),
+                f"加载区块: {len(world.chunks)}",
+                f"加载贴图: {len(textures)}",
+                controls_hint,
             ]
             for i, line in enumerate(lines):
-                text_surf = font.render(line, True, (255, 255, 255))
-                shadow = font.render(line, True, (0, 0, 0))
+                text_surf = debug_font.render(line, True, (255, 255, 255))
+                shadow = debug_font.render(line, True, (0, 0, 0))
                 screen.blit(shadow, (11, 11 + i * 18))
                 screen.blit(text_surf, (10, 10 + i * 18))
 

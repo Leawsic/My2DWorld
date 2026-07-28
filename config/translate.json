@@ -1,0 +1,14 @@
+{
+  "blocks": {
+    "grass_block_side": "草方块",
+    "dirt": "泥土",
+    "stone": "石头",
+    "cobblestone": "圆石",
+    "mossy_cobblestone": "苔石",
+    "bedrock": "基岩"
+  },
+  "gui": {
+    "window_title": "My2DWorld - 无限地形探索",
+    "controls_hint": "WASD: 移动 | 滚轮: 缩放 | 右键: 平移 | F3: 调试 | F11: 全屏 | ESC: 退出"
+  }
+}

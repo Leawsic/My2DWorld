@@ -1,0 +1,8 @@
+{
+  "grass_block_side": { "color": [87, 171, 60] },
+  "dirt":              { "color": [130, 96, 52] },
+  "stone":             { "color": [120, 120, 120] },
+  "cobblestone":       { "color": [100, 100, 100] },
+  "mossy_cobblestone": { "color": [90, 110, 90] },
+  "bedrock":           { "color": [50, 50, 50] }
+}
