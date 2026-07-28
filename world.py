@@ -255,9 +255,9 @@ class World:
                 for wy in range(y_start, y_end + 1):
                     bt = chunk.get_block(wx, wy)
                     if bt:
-                        # Convert world coords to screen coords
-                        sx = (wx - camera_x) * block_size + cx_off
-                        sy_px = (camera_y - wy) * block_size + cy_off
+                        # Convert world coords to screen coords (round to int for pixel alignment)
+                        sx = int((wx - camera_x) * block_size + cx_off)
+                        sy_px = int((camera_y - wy) * block_size + cy_off)
 
                         # Only draw if on screen (with margin)
                         if (-block_size <= sx <= screen_width and

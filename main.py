@@ -254,7 +254,7 @@ def main():
         world_mx = camera_x + (mx - cx_off) / block_size
         world_my = camera_y - (my - cy_off) / block_size
         wx = int(math.floor(world_mx))
-        wy = int(math.floor(world_my))
+        wy = int(math.ceil(world_my))
         if world_my >= 1:
             bt = world.get_block(wx, wy)
             if bt:
@@ -262,8 +262,8 @@ def main():
                 hovered_wx = wx
                 hovered_wy = wy
                 # Compute screen position for border (same formula as render_blocks)
-                hovered_sx = (wx - camera_x) * block_size + cx_off
-                hovered_sy = (camera_y - wy) * block_size + cy_off
+                hovered_sx = int((wx - camera_x) * block_size + cx_off)
+                hovered_sy = int((camera_y - wy) * block_size + cy_off)
 
         # --- RENDER ---
         screen.fill((135, 206, 235))  # sky blue
