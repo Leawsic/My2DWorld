@@ -14,6 +14,13 @@ python main.py
 - 使用须署名并链接至：https://faithfulpack.net/
 - 详见 `image/LICENSE.txt`
 
+部分纹理素材来源于 **Pixabay**（https://pixabay.com）
+游戏内使用的 Pixabay 图片均经过修改，并已整合进游戏逻辑，未以独立形式分发。
+
+---
+## 字体资源声明
+
+本游戏使用了 **‘霞鹜文楷’ **字体，版权归 LXGW 所有，遵循 SIL Open Font License 1.1。
 ---
 
 ## 📜 许可证
@@ -33,4 +40,4 @@ python main.py
 
 ---
 
-免责声明：部分纹理素材来源于 Pixabay（https://pixabay.com），游戏内使用的 Pixabay 图片均经过修改，并已整合进游戏逻辑，未以独立形式分发。
+
