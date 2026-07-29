@@ -32,6 +32,14 @@ FONT_PATH = "fonts/LXGWWenKai-Regular.ttf"
 BLOCK_CONFIG_PATH = "config/block.json"
 TRANSLATE_CONFIG_PATH = "config/translate.json"
 
+# GUIs path
+GUI_DIR = "image/gui"
+
+
+class GameMode:
+    """Game mode enum-like class."""
+    SPECTATOR = "spectator"
+
 
 def load_json(path: str):
     """Load a JSON file and return its contents."""
@@ -79,9 +87,24 @@ def get_texture_or_fallback(textures: dict, block_type: str,
     color = info.get("color", [200, 0, 200]) if isinstance(info, dict) else (200, 0, 200)
     surf = pygame.Surface((block_size, block_size))
     surf.fill(color)
-    # Draw a border to distinguish blocks
     pygame.draw.rect(surf, (0, 0, 0), surf.get_rect(), 1)
     return surf
+
+
+def load_gui_textures() -> dict:
+    """Load GUI textures (cursors)."""
+    gui = {}
+    for fname in os.listdir(GUI_DIR):
+        if fname.endswith(".png"):
+            path = os.path.join(GUI_DIR, fname)
+            try:
+                img = pygame.image.load(path).convert_alpha()
+                key = fname.rsplit(".", 1)[0]
+                gui[key] = img
+                print(f"  Loaded GUI: {key} ({img.get_width()}x{img.get_height()})")
+            except Exception as e:
+                print(f"  Failed to load {path}: {e}")
+    return gui
 
 
 def main():
@@ -95,8 +118,24 @@ def main():
     print(f"  block.json: {len(block_config)} block types")
     print(f"  translate.json loaded")
 
-    # Build block name map from translation config
-    block_names = translate_config.get("blocks", {})
+    # Current language
+    current_lang = translate_config.get("language", "zh")
+
+    # Helper: translate a gui key
+    def t(key, **kwargs):
+        texts = translate_config.get("gui", {}).get(key, {})
+        text = texts.get(current_lang, key)
+        if kwargs:
+            try:
+                text = text.format(**kwargs)
+            except KeyError:
+                pass
+        return text
+
+    # Helper: translate a block name
+    def block_name(block_type):
+        entries = translate_config.get("blocks", {}).get(block_type, {})
+        return entries.get(current_lang, block_type)
 
     # Build color map from block config
     color_map = {}
@@ -104,11 +143,11 @@ def main():
         if isinstance(info, dict) and "color" in info:
             color_map[key] = info
 
-    # GUI translations
-    gui_text = translate_config.get("gui", {})
-    window_title = gui_text.get("window_title", "My2DWorld")
-    controls_hint = gui_text.get("controls_hint",
-        "WASD: Move | Scroll: Zoom | RMB: Pan | F3: Debug | F11: FS | ESC: Exit")
+    # GUI texts
+    gui_section = translate_config.get("gui", {})
+    window_title_texts = gui_section.get("window_title", {})
+    mode_texts = gui_section.get("mode_spectator", {})
+    controls_texts = gui_section.get("controls_hint", {})
 
     screen_width = INITIAL_WIDTH
     screen_height = INITIAL_HEIGHT
@@ -118,23 +157,29 @@ def main():
         (screen_width, screen_height),
         pygame.RESIZABLE
     )
-    pygame.display.set_caption(window_title)
+    pygame.display.set_caption(window_title_texts.get(current_lang, "My2DWorld"))
     clock = pygame.time.Clock()
 
     # Load font from file
     if os.path.isfile(FONT_PATH):
         debug_font = pygame.font.Font(FONT_PATH, 14)
         name_font = pygame.font.Font(FONT_PATH, 20)
+        mode_font = pygame.font.Font(FONT_PATH, 18)
         print(f"  Loaded font: {FONT_PATH}")
     else:
         debug_font = pygame.font.SysFont("Arial", 14)
         name_font = pygame.font.SysFont("Arial", 20)
+        mode_font = pygame.font.SysFont("Arial", 18)
         print(f"  Warning: font '{FONT_PATH}' not found, using Arial fallback")
 
     # Load textures
     print("Loading textures...")
     textures = load_textures()
     print(f"Loaded {len(textures)} textures")
+
+    # Load GUI textures
+    print("Loading GUI...")
+    gui_textures = load_gui_textures()
 
     # Create world and player
     world = World(view_distance_chunks=VIEW_DISTANCE_CHUNKS)
@@ -154,8 +199,16 @@ def main():
     rmb_drag_start_mouse = (0, 0)   # screen coords
     rmb_drag_start_offset = (0.0, 0.0)  # world coords
 
+    # Game mode
+    game_mode = GameMode.SPECTATOR
+    mode_list = [GameMode.SPECTATOR]
+    mode_index = 0
+
     running = True
     show_debug = True
+
+    # Hide system mouse cursor (we draw our own)
+    pygame.mouse.set_visible(False)
 
     while running:
         dt = clock.tick(FPS) / 16.667  # normalize to ~60 FPS
@@ -195,12 +248,21 @@ def main():
                             (screen_width, screen_height),
                             pygame.RESIZABLE
                         )
+                elif event.key == pygame.K_TAB:
+                    # Cycle game mode (currently only spectator)
+                    mode_index = (mode_index + 1) % len(mode_list)
+                    game_mode = mode_list[mode_index]
+                elif event.key == pygame.K_l:
+                    # Toggle language
+                    current_lang = "en" if current_lang == "zh" else "zh"
+                    pygame.display.set_caption(
+                        window_title_texts.get(current_lang, "My2DWorld")
+                    )
 
             elif event.type == pygame.MOUSEWHEEL:
                 # Zoom in/out
                 if event.y > 0:
                     new_size = block_size * ZOOM_FACTOR
-                    # Max zoom in: clamp so at least 2 blocks visible in the shorter dimension
                     max_bs = max(min(screen_width, screen_height) / 2, DEFAULT_BLOCK_SIZE)
                     if new_size <= max_bs:
                         block_size = int(new_size)
@@ -209,24 +271,20 @@ def main():
                     if new_size >= MIN_BLOCK_SIZE:
                         block_size = max(int(new_size), MIN_BLOCK_SIZE)
 
-        # --- Right mouse button drag to pan camera ---
+        # --- Right mouse button drag to pan camera (spectator mode) ---
         if mouse_buttons[2]:  # right button pressed
             if not is_rmb_dragging:
-                # Start drag
                 is_rmb_dragging = True
                 rmb_drag_start_mouse = (mx, my)
                 rmb_drag_start_offset = (camera_offset_x, camera_offset_y)
             else:
-                # Continue drag
                 sx0, sy0 = rmb_drag_start_mouse
                 dx_px = mx - sx0
                 dy_px = my - sy0
-                # Convert screen pixel delta to world coordinate delta
                 camera_offset_x = rmb_drag_start_offset[0] - dx_px / block_size
                 camera_offset_y = rmb_drag_start_offset[1] + dy_px / block_size
         else:
             if is_rmb_dragging:
-                # End drag - keep current offset, just stop dragging
                 is_rmb_dragging = False
 
         # Update player
@@ -247,8 +305,6 @@ def main():
         hovered_wy = 0
         hovered_sx = 0
         hovered_sy = 0
-        # Convert mouse screen coords to world coords
-        # Use integer division to stay aligned with render_blocks in world.py
         cx_off = screen_width // 2
         cy_off = screen_height // 2
         world_mx = camera_x + (mx - cx_off) / block_size
@@ -261,7 +317,6 @@ def main():
                 hovered_block = bt
                 hovered_wx = wx
                 hovered_wy = wy
-                # Compute screen position for border (same formula as render_blocks)
                 hovered_sx = int((wx - camera_x) * block_size + cx_off)
                 hovered_sy = int((camera_y - wy) * block_size + cy_off)
 
@@ -290,33 +345,50 @@ def main():
 
         # Draw block name at top-center of screen
         if hovered_block:
-            name = block_names.get(hovered_block, hovered_block)
+            name = block_name(hovered_block)
             name_surf = name_font.render(name, True, (255, 255, 255))
             shadow_surf = name_font.render(name, True, (0, 0, 0))
-            # Center horizontally at top
             nx = (screen_width - name_surf.get_width()) // 2
-            ny = 10  # 10px from top
+            ny = 10
             screen.blit(shadow_surf, (nx + 1, ny + 1))
             screen.blit(name_surf, (nx, ny))
+
+        # Draw custom mouse cursor
+        cursor_key = "mouse_right_spectator" if is_rmb_dragging else "mouse"
+        cursor_img = gui_textures.get(cursor_key)
+        if cursor_img:
+            screen.blit(cursor_img, (mx, my))
+
+        # Draw mode label at bottom-right corner
+        mode_name = mode_texts.get(current_lang, "Spectator")
+        mode_surf = mode_font.render(mode_name, True, (255, 255, 255))
+        mode_shadow = mode_font.render(mode_name, True, (0, 0, 0))
+        mode_x = screen_width - mode_surf.get_width() - 10
+        mode_y = screen_height - mode_surf.get_height() - 10
+        screen.blit(mode_shadow, (mode_x + 1, mode_y + 1))
+        screen.blit(mode_surf, (mode_x, mode_y))
 
         # Debug info
         if show_debug:
             zoom_pct = int(block_size / DEFAULT_BLOCK_SIZE * 100)
-            hover_info = ""
+            hover_debug = ""
             if hovered_block:
-                name = block_names.get(hovered_block, hovered_block)
-                hover_info = f" | 悬停: ({hovered_wx}, {hovered_wy}) {name}"
+                name = block_name(hovered_block)
+                hover_debug = t("debug_hover", name=name)
             lines = [
-                f"My2DWorld - FPS: {clock.get_fps():.0f}",
-                f"玩家: ({px:.1f}, {py:.1f})",
-                f"相机: ({camera_x:.1f}, {camera_y:.1f})",
-                f"鼠标: ({mx},{my}) → 世界: ({wx},{wy}){hover_info}",
-                f"方块大小: {block_size}px ({zoom_pct}%)",
-                f"窗口: {screen_width}x{screen_height}" +
-                (" (全屏)" if is_fullscreen else ""),
-                f"加载区块: {len(world.chunks)}",
-                f"加载贴图: {len(textures)}",
-                controls_hint,
+                t("debug_fps", fps=clock.get_fps()),
+                t("debug_mode", mode=mode_name),
+                t("debug_player", x=px, y=py),
+                t("debug_camera", x=camera_x, y=camera_y),
+                t("debug_mouse", mx=mx, my=my, wx=wx, wy=wy) + hover_debug,
+                t("debug_zoom", pct=zoom_pct),
+                t("debug_window", w=screen_width, h=screen_height) +
+                (t("debug_fullscreen") if is_fullscreen else ""),
+                t("debug_chunks", n=len(world.chunks)),
+                t("debug_textures", n=len(textures)),
+                t("debug_lang"),
+                controls_texts.get(current_lang,
+                    "WASD:Move | Scroll:Zoom | RMB:Pan | L:Lang | F3:Debug | F11:FS | ESC:Exit"),
             ]
             for i, line in enumerate(lines):
                 text_surf = debug_font.render(line, True, (255, 255, 255))

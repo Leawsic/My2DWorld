@@ -1,14 +1,32 @@
 {
+  "language": "zh",
+  "languages": {
+    "zh": { "name": "中文", "flag": "zh" },
+    "en": { "name": "English", "flag": "en" }
+  },
   "blocks": {
-    "grass_block_side": "草方块",
-    "dirt": "泥土",
-    "stone": "石头",
-    "cobblestone": "圆石",
-    "mossy_cobblestone": "苔石",
-    "bedrock": "基岩"
+    "grass_block_side": { "zh": "草方块", "en": "Grass Block" },
+    "dirt": { "zh": "泥土", "en": "Dirt" },
+    "stone": { "zh": "石头", "en": "Stone" },
+    "cobblestone": { "zh": "圆石", "en": "Cobblestone" },
+    "mossy_cobblestone": { "zh": "苔石", "en": "Mossy Cobblestone" },
+    "bedrock": { "zh": "基岩", "en": "Bedrock" }
   },
   "gui": {
-    "window_title": "My2DWorld - 无限地形探索",
-    "controls_hint": "WASD: 移动 | 滚轮: 缩放 | 右键: 平移 | F3: 调试 | F11: 全屏 | ESC: 退出"
+    "window_title": { "zh": "My2DWorld - 无限地形探索", "en": "My2DWorld - Infinite Terrain" },
+    "mode_spectator": { "zh": "旁观模式", "en": "Spectator Mode" },
+    "controls_hint": { "zh": "WASD:移动 | 滚轮:缩放 | 右键:平移 | L:切换语言 | F3:调试 | F11:全屏 | ESC:退出", "en": "WASD:Move | Scroll:Zoom | RMB:Pan | L:Lang | F3:Debug | F11:FS | ESC:Exit" },
+    "debug_fps": { "zh": "FPS: {fps}", "en": "FPS: {fps}" },
+    "debug_player": { "zh": "玩家: ({x:.1f}, {y:.1f})", "en": "Player: ({x:.1f}, {y:.1f})" },
+    "debug_camera": { "zh": "相机: ({x:.1f}, {y:.1f})", "en": "Cam: ({x:.1f}, {y:.1f})" },
+    "debug_mode": { "zh": "模式: {mode}", "en": "Mode: {mode}" },
+    "debug_mouse": { "zh": "鼠标: ({mx},{my}) → ({wx},{wy})", "en": "Mouse: ({mx},{my}) → ({wx},{wy})" },
+    "debug_hover": { "zh": " {name}", "en": " {name}" },
+    "debug_zoom": { "zh": "缩放: {pct}%", "en": "Zoom: {pct}%" },
+    "debug_window": { "zh": "窗口: {w}x{h}", "en": "Window: {w}x{h}" },
+    "debug_fullscreen": { "zh": " 全屏", "en": " FS" },
+    "debug_chunks": { "zh": "区块: {n}", "en": "Chunks: {n}" },
+    "debug_textures": { "zh": "贴图: {n}", "en": "Textures: {n}" },
+    "debug_lang": { "zh": "语言: 中文", "en": "Lang: English" }
   }
 }
