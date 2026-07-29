@@ -27,6 +27,20 @@
     "debug_fullscreen": { "zh": " 全屏", "en": " FS" },
     "debug_chunks": { "zh": "区块: {n}", "en": "Chunks: {n}" },
     "debug_textures": { "zh": "贴图: {n}", "en": "Textures: {n}" },
-    "debug_lang": { "zh": "语言: 中文", "en": "Lang: English" }
+    "debug_lang": { "zh": "语言: 中文", "en": "English" },
+    "welcome": { "zh": "欢迎回来, {name}!", "en": "Welcome back, {name}!" },
+    "homepage_title": { "zh": "My2DWorld", "en": "My2DWorld" },
+    "homepage_copyright": { "zh": "© 2026 My2DWorld", "en": "© 2026 My2DWorld" },
+    "homepage_username": { "zh": "账号", "en": "Username" },
+    "homepage_password": { "zh": "密码", "en": "Password" },
+    "homepage_login": { "zh": "登录", "en": "Login" },
+    "homepage_register": { "zh": "注册", "en": "Register" },
+    "homepage_login_success": { "zh": "登录成功!", "en": "Login successful!" },
+    "homepage_login_failed": { "zh": "账号或密码错误", "en": "Wrong username or password" },
+    "homepage_register_success": { "zh": "注册成功!", "en": "Registered successfully!" },
+    "homepage_register_exists": { "zh": "账号已存在", "en": "Account already exists" },
+    "homepage_input_username": { "zh": "请输入账号", "en": "Enter username" },
+    "homepage_input_password": { "zh": "请输入密码", "en": "Enter password" },
+    "homepage_password_short": { "zh": "密码长度至少4位", "en": "Password must be 4+ chars" }
   }
 }
