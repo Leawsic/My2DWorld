@@ -10,6 +10,7 @@ import random
 import pygame
 
 from homepage import Button, HOME_BG_DIR, load_translations, t
+from logger import log_event
 
 SETTINGS_PATH = "config/basic.json"
 FONT_PATH = "fonts/LXGWWenKai-Regular.ttf"
@@ -53,7 +54,7 @@ def save_settings(settings):
         with open(SETTINGS_PATH, "w", encoding="utf-8") as f:
             json.dump(settings, f, ensure_ascii=False, indent=2)
     except Exception as e:
-        print(f"Warning: failed to save settings: {e}")
+        log_event(f"Warning: failed to save settings: {e}")
 
 
 def settings_screen(screen, screen_width, screen_height, settings):

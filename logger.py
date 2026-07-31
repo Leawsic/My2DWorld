@@ -31,10 +31,16 @@ def init_log():
     try:
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         _log_path = os.path.join(LOGS_DIR, f"{timestamp}.log")
+        header_top = "=" * 60
+        header_mid = f"My2DWorld Log - Started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         with open(_log_path, "a", encoding="utf-8") as f:
+            f.write(header_top + "\n")
+            f.write(header_mid + "\n")
             f.write("=" * 60 + "\n")
-            f.write(f"My2DWorld Log - Started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-            f.write("=" * 60 + "\n")
+        # Mirror the header to the console too.
+        print(header_top)
+        print(header_mid)
+        print("=" * 60)
         return _log_path
     except Exception as e:
         print(f"Warning: failed to init log file: {e}")
@@ -44,19 +50,28 @@ def init_log():
 
 def log_event(message: str):
     """
-    Write a timestamped message to the current log file.
+    Write a timestamped message to BOTH the current log file and the console.
     Creates the log file automatically if not yet initialized.
+
+    This is the single entry point for all log output: every log_* helper
+    routes through here, so messages are guaranteed to appear in both places
+    rather than one or the other.
     """
     global _log_path
     if _log_path is None:
         init_log()
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    line = f"[{timestamp}] {message}"
+    # Always echo to the console.
+    print(line)
+    # Also persist to the log file when one is available.
     if _log_path is None:
         return
     try:
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with open(_log_path, "a", encoding="utf-8") as f:
-            f.write(f"[{timestamp}] {message}\n")
+            f.write(line + "\n")
     except Exception as e:
+        # Avoid recursion: report file-write failures to the console only.
         print(f"Warning: failed to write log: {e}")
 
 

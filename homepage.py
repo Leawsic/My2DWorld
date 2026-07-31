@@ -9,7 +9,7 @@ import random
 import pygame
 
 from account import register, login, init_default_account, hash_password
-from logger import log_login
+from logger import log_event, log_login
 
 # Paths
 HOME_BG_DIR = "image/Homepage_background"
@@ -116,7 +116,7 @@ def load_translations():
         with open(TRANSLATE_PATH, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
-        print(f"Warning: failed to load translations: {e}")
+        log_event(f"Warning: failed to load translations: {e}")
         return {"language": "zh", "gui": {}, "blocks": {}}
 
 

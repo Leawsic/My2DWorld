@@ -8,7 +8,7 @@ import json
 import os
 import secrets
 
-from logger import log_login, log_register
+from logger import log_event, log_login, log_register
 
 ACCOUNT_DIR = "Account_and_password"
 DEFAULT_USERNAME = "steve"
@@ -91,6 +91,6 @@ def init_default_account():
     """Create the default 'steve' account if it doesn't exist."""
     if not user_exists(DEFAULT_USERNAME):
         register(DEFAULT_USERNAME, DEFAULT_PASSWORD)
-        print(f"  Created default account: {DEFAULT_USERNAME}")
+        log_event(f"  Created default account: {DEFAULT_USERNAME}")
         return True
     return False

@@ -12,7 +12,7 @@ import pygame
 from world import World, GRASS, DIRT, STONE, COBBLESTONE, MOSSY_COBBLESTONE, BEDROCK
 from player import Player
 from homepage import homepage
-from logger import init_log, log_game_start, log_game_end, log_pause, log_resume
+from logger import init_log, log_event, log_game_start, log_game_end, log_pause, log_resume
 
 # Constants
 INITIAL_WIDTH = 1024
@@ -42,17 +42,17 @@ def load_json(path: str):
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
     except FileNotFoundError:
-        print(f"Warning: config file '{path}' not found")
+        log_event(f"Warning: config file '{path}' not found")
         return {}
     except json.JSONDecodeError as e:
-        print(f"Warning: failed to parse '{path}': {e}")
+        log_event(f"Warning: failed to parse '{path}': {e}")
         return {}
 
 
 def load_textures(tex_dir: str = "image/block") -> dict:
     textures = {}
     if not os.path.isdir(tex_dir):
-        print(f"Warning: texture directory '{tex_dir}' not found")
+        log_event(f"Warning: texture directory '{tex_dir}' not found")
         return textures
     for fname in os.listdir(tex_dir):
         if fname.endswith(".png"):
@@ -61,9 +61,9 @@ def load_textures(tex_dir: str = "image/block") -> dict:
                 img = pygame.image.load(path).convert_alpha()
                 key = fname.rsplit(".", 1)[0]
                 textures[key] = img
-                print(f"  Loaded texture: {key} ({img.get_width()}x{img.get_height()})")
+                log_event(f"  Loaded texture: {key} ({img.get_width()}x{img.get_height()})")
             except Exception as e:
-                print(f"  Failed to load {path}: {e}")
+                log_event(f"  Failed to load {path}: {e}")
     return textures
 
 
@@ -91,9 +91,9 @@ def load_gui_textures() -> dict:
                 img = pygame.image.load(path).convert_alpha()
                 key = fname.rsplit(".", 1)[0]
                 gui[key] = img
-                print(f"  Loaded GUI: {key} ({img.get_width()}x{img.get_height()})")
+                log_event(f"  Loaded GUI: {key} ({img.get_width()}x{img.get_height()})")
             except Exception as e:
-                print(f"  Failed to load {path}: {e}")
+                log_event(f"  Failed to load {path}: {e}")
     return gui
 
 
