@@ -12,6 +12,7 @@ import pygame
 from world import World, GRASS, DIRT, STONE, COBBLESTONE, MOSSY_COBBLESTONE, BEDROCK
 from player import Player
 from homepage import homepage
+from logger import init_log, log_game_start, log_game_end, log_pause, log_resume
 
 # Constants
 INITIAL_WIDTH = 1024
@@ -99,7 +100,10 @@ def load_gui_textures() -> dict:
 def start_game(screen, screen_width, screen_height, username, lang, settings):
     """
     Main game loop after successful login.
+    Returns "homepage" to return to the main menu, or False to quit the app.
     """
+    log_game_start(username)
+
     # Load configs
     block_config = load_json(BLOCK_CONFIG_PATH)
     translate_config = load_json(TRANSLATE_CONFIG_PATH)
@@ -181,6 +185,7 @@ def start_game(screen, screen_width, screen_height, username, lang, settings):
     mode_index = 0
 
     running = True
+    result = False  # Return value: False = quit app, "homepage" = back to menu
     paused = False
     show_debug = settings["debug_default"]
     pygame.mouse.set_visible(False)
@@ -203,9 +208,15 @@ def start_game(screen, screen_width, screen_height, username, lang, settings):
             pause_button_width,
             pause_button_height,
         )
-        quit_rect = pygame.Rect(
+        home_rect = pygame.Rect(
             resume_rect.x,
             resume_rect.bottom + 14,
+            pause_button_width,
+            pause_button_height,
+        )
+        quit_rect = pygame.Rect(
+            home_rect.x,
+            home_rect.bottom + 14,
             pause_button_width,
             pause_button_height,
         )
@@ -213,17 +224,24 @@ def start_game(screen, screen_width, screen_height, username, lang, settings):
         # Event handling
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
+                result = False
                 running = False
 
             elif paused:
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                     paused = False
                     pygame.mouse.set_visible(False)
+                    log_resume(username)
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     if resume_rect.collidepoint(event.pos):
                         paused = False
                         pygame.mouse.set_visible(False)
+                        log_resume(username)
+                    elif home_rect.collidepoint(event.pos):
+                        result = "homepage"
+                        running = False
                     elif quit_rect.collidepoint(event.pos):
+                        result = False
                         running = False
 
             elif event.type == pygame.VIDEORESIZE and not is_fullscreen:
@@ -238,6 +256,7 @@ def start_game(screen, screen_width, screen_height, username, lang, settings):
                     paused = True
                     pygame.mouse.set_visible(True)
                     is_rmb_dragging = False
+                    log_pause(username)
                 elif event.key == pygame.K_F3:
                     show_debug = not show_debug
                 elif event.key == pygame.K_F11:
@@ -434,6 +453,7 @@ def start_game(screen, screen_width, screen_height, username, lang, settings):
 
             for rect, label in (
                 (resume_rect, pause_text("pause_resume", "Resume")),
+                (home_rect, pause_text("pause_homepage", "Homepage")),
                 (quit_rect, pause_text("pause_quit", "Quit")),
             ):
                 hovered = rect.collidepoint((mx, my))
@@ -445,12 +465,22 @@ def start_game(screen, screen_width, screen_height, username, lang, settings):
 
         pygame.display.flip()
 
-    return False  # Signal to quit
+    # Log game end before returning
+    if result == "homepage":
+        log_game_end(username, "homepage")
+    else:
+        log_game_end(username, "quit")
+
+    return result
 
 
 def main():
-    """Main entry point: show homepage, then start game."""
+    """Main entry point: show homepage, then start game.
+    Loops back to the homepage when the user selects "back to menu" from pause."""
     pygame.init()
+
+    # Initialize logging with a system-time-based filename (logs/YYYY-MM-DD_HH-MM-SS.log)
+    init_log()
 
     screen_width = INITIAL_WIDTH
     screen_height = INITIAL_HEIGHT
@@ -461,18 +491,28 @@ def main():
     )
     pygame.display.set_caption("My2DWorld")
 
-    # Show homepage → returns (username, lang, settings, screen_width, screen_height) or None
-    result = homepage(screen, screen_width, screen_height)
+    while True:
+        # Show homepage → returns (username, lang, settings, screen_width, screen_height) or None
+        result = homepage(screen, screen_width, screen_height)
 
-    if result is None:
-        # User quit from homepage
-        pygame.quit()
-        sys.exit()
+        if result is None:
+            # User quit from homepage
+            pygame.quit()
+            sys.exit()
 
-    username, lang, settings, actual_width, actual_height = result
+        username, lang, settings, actual_width, actual_height = result
 
-    # Start the game with actual screen dimensions (fixes maximize/fullscreen scaling)
-    start_game(screen, actual_width, actual_height, username, lang, settings)
+        # Start the game with actual screen dimensions (fixes maximize/fullscreen scaling)
+        game_result = start_game(screen, actual_width, actual_height,
+                                 username, lang, settings)
+
+        if game_result != "homepage":
+            # User quit the app from the pause menu
+            break
+
+        # User chose "back to menu" - loop back to the homepage
+        # Use the dimensions from the homepage for the next cycle
+        screen_width, screen_height = actual_width, actual_height
 
     pygame.quit()
     sys.exit()

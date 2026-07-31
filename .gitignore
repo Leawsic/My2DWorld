@@ -6,3 +6,4 @@ __pycache__/
 .idea
 .codegraph
 Account_and_password
+logs

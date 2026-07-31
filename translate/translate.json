@@ -52,6 +52,7 @@
     "settings_back": { "zh": "返回", "en": "Back" },
     "pause_title": { "zh": "游戏暂停", "en": "Paused" },
     "pause_resume": { "zh": "继续游戏", "en": "Resume" },
+    "pause_homepage": { "zh": "回到开始菜单", "en": "Back to Menu" },
     "pause_quit": { "zh": "退出游戏", "en": "Quit" },
     "homepage_default_login": { "zh": "使用默认账户 steve 登录?", "en": "Login with default account steve?" },
     "homepage_confirm": { "zh": "确认", "en": "Confirm" },

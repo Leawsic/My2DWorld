@@ -8,7 +8,8 @@ import os
 import random
 import pygame
 
-from account import register, login, init_default_account
+from account import register, login, init_default_account, hash_password
+from logger import log_login
 
 # Paths
 HOME_BG_DIR = "image/Homepage_background"
@@ -246,6 +247,8 @@ def homepage(screen, screen_width, screen_height):
                         show_modal = False
                     elif event.key == pygame.K_RETURN:
                         show_modal = False
+                        pwd_hash, salt = hash_password(DEFAULT_PASS)
+                        log_login(DEFAULT_USER, pwd_hash, salt, True)
                         return (DEFAULT_USER, lang, settings, screen_width, screen_height)
                 elif event.key == pygame.K_ESCAPE:
                     return None
@@ -297,6 +300,8 @@ def homepage(screen, screen_width, screen_height):
                     # Modal buttons
                     if modal_confirm_btn.handle_event(event):
                         show_modal = False
+                        pwd_hash, salt = hash_password(DEFAULT_PASS)
+                        log_login(DEFAULT_USER, pwd_hash, salt, True)
                         return (DEFAULT_USER, lang, settings,
                                 screen_width, screen_height)
                     elif modal_cancel_btn.handle_event(event):

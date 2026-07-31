@@ -8,6 +8,8 @@ import json
 import os
 import secrets
 
+from logger import log_login, log_register
+
 ACCOUNT_DIR = "Account_and_password"
 DEFAULT_USERNAME = "steve"
 DEFAULT_PASSWORD = "1234asdf"
@@ -42,6 +44,8 @@ def register(username: str, password: str) -> bool:
     _ensure_dir()
     path = _account_path(username)
     if os.path.exists(path):
+        pwd_hash, salt = hash_password(password)
+        log_register(username, pwd_hash, salt, False)
         return False  # User already exists
 
     pwd_hash, salt = hash_password(password)
@@ -52,6 +56,7 @@ def register(username: str, password: str) -> bool:
     }
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
+    log_register(username, pwd_hash, salt, True)
     return True
 
 
@@ -62,6 +67,8 @@ def login(username: str, password: str) -> bool:
     _ensure_dir()
     path = _account_path(username)
     if not os.path.exists(path):
+        pwd_hash, salt = hash_password(password)
+        log_login(username, pwd_hash, salt, False)
         return False
 
     with open(path, "r", encoding="utf-8") as f:
@@ -70,7 +77,9 @@ def login(username: str, password: str) -> bool:
     stored_hash = data.get("password_hash", "")
     salt = data.get("salt", "")
     computed_hash, _ = hash_password(password, salt)
-    return computed_hash == stored_hash
+    success = computed_hash == stored_hash
+    log_login(username, stored_hash, salt, success)
+    return success
 
 
 def user_exists(username: str) -> bool:
