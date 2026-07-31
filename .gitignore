@@ -3,3 +3,5 @@ __pycache__/
 .venv/
 .vscode/
 *.log
+.idea
+Account_and_password
