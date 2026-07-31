@@ -10,8 +10,10 @@ import random
 import pygame
 
 from homepage import Button, HOME_BG_DIR, load_translations, t
+from logger import log_event
+from runtime import CONFIG_DIR, ensure_runtime_data
 
-SETTINGS_PATH = "config/basic.json"
+SETTINGS_PATH = os.path.join(CONFIG_DIR, "basic.json")
 FONT_PATH = "fonts/LXGWWenKai-Regular.ttf"
 
 DEFAULT_SETTINGS = {
@@ -35,7 +37,8 @@ LANG_BTN_HEIGHT = 44
 
 
 def load_settings():
-    """Load settings from config/basic.json (falling back to defaults)."""
+    """Load settings from run/config/basic.json (falling back to defaults)."""
+    ensure_runtime_data()
     try:
         with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -47,13 +50,14 @@ def load_settings():
 
 
 def save_settings(settings):
-    """Persist settings to config/basic.json."""
+    """Persist settings to run/config/basic.json."""
     try:
+        ensure_runtime_data()
         os.makedirs(os.path.dirname(SETTINGS_PATH), exist_ok=True)
         with open(SETTINGS_PATH, "w", encoding="utf-8") as f:
             json.dump(settings, f, ensure_ascii=False, indent=2)
     except Exception as e:
-        print(f"Warning: failed to save settings: {e}")
+        log_event(f"Warning: failed to save settings: {e}")
 
 
 def settings_screen(screen, screen_width, screen_height, settings):

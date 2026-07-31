@@ -15,11 +15,12 @@
   "gui": {
     "window_title": { "zh": "My2DWorld - 无限地形探索", "en": "My2DWorld - Infinite Terrain" },
     "mode_spectator": { "zh": "旁观模式", "en": "Spectator Mode" },
-    "controls_hint": { "zh": "WASD:移动 | 滚轮:缩放 | 右键:平移 | Ctrl+L:切换语言 | F3:调试 | F11:全屏 | ESC:退出", "en": "WASD:Move | Scroll:Zoom | RMB:Pan | Ctrl+L:Lang | F3:Debug | F11:FS | ESC:Exit" },
+    "controls_hint": { "zh": "WASD:移动 | 滚轮:缩放 | 右键:平移 | Ctrl+L:切换语言 | F3:调试 | F11:全屏 | ESC:暂停", "en": "WASD:Move | Scroll:Zoom | RMB:Pan | Ctrl+L:Lang | F3:Debug | F11:FS | ESC:Pause" },
     "debug_fps": { "zh": "FPS: {fps}", "en": "FPS: {fps}" },
     "debug_player": { "zh": "玩家: ({x:.1f}, {y:.1f})", "en": "Player: ({x:.1f}, {y:.1f})" },
     "debug_camera": { "zh": "相机: ({x:.1f}, {y:.1f})", "en": "Cam: ({x:.1f}, {y:.1f})" },
     "debug_mode": { "zh": "模式: {mode}", "en": "Mode: {mode}" },
+    "debug_world": { "zh": "世界: {name}", "en": "World: {name}" },
     "debug_mouse": { "zh": "鼠标: ({mx},{my}) → ({wx},{wy})", "en": "Mouse: ({mx},{my}) → ({wx},{wy})" },
     "debug_hover": { "zh": " {name}", "en": " {name}" },
     "debug_zoom": { "zh": "缩放: {pct}%", "en": "Zoom: {pct}%" },
@@ -43,6 +44,8 @@
     "homepage_input_password": { "zh": "请输入密码", "en": "Enter password" },
     "homepage_password_short": { "zh": "密码长度至少4位", "en": "Password must be 4+ chars" },
     "homepage_settings": { "zh": "设置", "en": "Settings" },
+    "homepage_quit": { "zh": "退出游戏", "en": "Quit Game" },
+    "homepage_quit_confirm": { "zh": "确定退出游戏吗？", "en": "Quit the game?" },
     "settings_title": { "zh": "设置", "en": "Settings" },
     "settings_fullscreen": { "zh": "全屏", "en": "Fullscreen" },
     "settings_language": { "zh": "语言", "en": "Language" },
@@ -57,5 +60,18 @@
     "homepage_default_login": { "zh": "使用默认账户 steve 登录?", "en": "Login with default account steve?" },
     "homepage_confirm": { "zh": "确认", "en": "Confirm" },
     "homepage_cancel": { "zh": "取消", "en": "Cancel" }
+    ,"world_menu_title": { "zh": "我的世界", "en": "My Worlds" }
+    ,"world_create": { "zh": "创建世界", "en": "Create World" }
+    ,"world_create_confirm": { "zh": "创建并进入", "en": "Create and Enter" }
+    ,"world_back": { "zh": "返回开始界面", "en": "Back to Start" }
+    ,"world_name": { "zh": "世界名称", "en": "World Name" }
+    ,"world_empty": { "zh": "还没有创建世界", "en": "No worlds created yet" }
+    ,"world_name_required": { "zh": "请输入世界名称", "en": "Enter a world name" }
+    ,"world_name_exists": { "zh": "该世界名称已存在", "en": "A world with this name already exists" }
+    ,"world_save_failed": { "zh": "世界保存失败", "en": "Failed to save world" }
+    ,"world_edit": { "zh": "修改", "en": "Edit" }
+    ,"world_delete": { "zh": "删除", "en": "Delete" }
+    ,"world_edit_confirm": { "zh": "保存名称", "en": "Save Name" }
+    ,"world_cancel": { "zh": "取消", "en": "Cancel" }
   }
 }

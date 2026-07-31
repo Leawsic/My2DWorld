@@ -12,7 +12,7 @@ import pygame
 from world import World, GRASS, DIRT, STONE, COBBLESTONE, MOSSY_COBBLESTONE, BEDROCK
 from player import Player
 from homepage import homepage
-from logger import init_log, log_game_start, log_game_end, log_pause, log_resume
+from logger import init_log, log_event, log_game_start, log_game_end, log_pause, log_resume
 
 # Constants
 INITIAL_WIDTH = 1024
@@ -42,17 +42,17 @@ def load_json(path: str):
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
     except FileNotFoundError:
-        print(f"Warning: config file '{path}' not found")
+        log_event(f"Warning: config file '{path}' not found")
         return {}
     except json.JSONDecodeError as e:
-        print(f"Warning: failed to parse '{path}': {e}")
+        log_event(f"Warning: failed to parse '{path}': {e}")
         return {}
 
 
 def load_textures(tex_dir: str = "image/block") -> dict:
     textures = {}
     if not os.path.isdir(tex_dir):
-        print(f"Warning: texture directory '{tex_dir}' not found")
+        log_event(f"Warning: texture directory '{tex_dir}' not found")
         return textures
     for fname in os.listdir(tex_dir):
         if fname.endswith(".png"):
@@ -61,9 +61,9 @@ def load_textures(tex_dir: str = "image/block") -> dict:
                 img = pygame.image.load(path).convert_alpha()
                 key = fname.rsplit(".", 1)[0]
                 textures[key] = img
-                print(f"  Loaded texture: {key} ({img.get_width()}x{img.get_height()})")
+                log_event(f"  Loaded texture: {key} ({img.get_width()}x{img.get_height()})")
             except Exception as e:
-                print(f"  Failed to load {path}: {e}")
+                log_event(f"  Failed to load {path}: {e}")
     return textures
 
 
@@ -91,18 +91,18 @@ def load_gui_textures() -> dict:
                 img = pygame.image.load(path).convert_alpha()
                 key = fname.rsplit(".", 1)[0]
                 gui[key] = img
-                print(f"  Loaded GUI: {key} ({img.get_width()}x{img.get_height()})")
+                log_event(f"  Loaded GUI: {key} ({img.get_width()}x{img.get_height()})")
             except Exception as e:
-                print(f"  Failed to load {path}: {e}")
+                log_event(f"  Failed to load {path}: {e}")
     return gui
 
 
-def start_game(screen, screen_width, screen_height, username, lang, settings):
+def start_game(screen, screen_width, screen_height, username, lang, settings, world_name):
     """
     Main game loop after successful login.
     Returns "homepage" to return to the main menu, or False to quit the app.
     """
-    log_game_start(username)
+    log_game_start(username, world_name)
 
     # Load configs
     block_config = load_json(BLOCK_CONFIG_PATH)
@@ -419,6 +419,7 @@ def start_game(screen, screen_width, screen_height, username, lang, settings):
             lines = [
                 tref("debug_fps", fps=clock.get_fps()),
                 tref("debug_mode", mode=mode_name),
+                tref("debug_world", name=world_name),
                 tref("debug_player", x=px, y=py),
                 tref("debug_camera", x=camera_x, y=camera_y),
                 tref("debug_mouse", mx=mx, my=my, wx=wx, wy=wy) + hover_debug,
@@ -479,7 +480,7 @@ def main():
     Loops back to the homepage when the user selects "back to menu" from pause."""
     pygame.init()
 
-    # Initialize logging with a system-time-based filename (logs/YYYY-MM-DD_HH-MM-SS.log)
+    # Initialize logging with a system-time-based filename (run/logs/YYYY-MM-DD_HH-MM-SS.log)
     init_log()
 
     screen_width = INITIAL_WIDTH
@@ -502,9 +503,18 @@ def main():
 
         username, lang, settings, actual_width, actual_height = result
 
+        from world_menu import world_menu
+        world_result = world_menu(screen, actual_width, actual_height, username, lang)
+        if world_result is None:
+            break
+        if world_result == "back":
+            screen_width, screen_height = actual_width, actual_height
+            continue
+        world_name, screen, actual_width, actual_height = world_result
+
         # Start the game with actual screen dimensions (fixes maximize/fullscreen scaling)
         game_result = start_game(screen, actual_width, actual_height,
-                                 username, lang, settings)
+                                 username, lang, settings, world_name)
 
         if game_result != "homepage":
             # User quit the app from the pause menu

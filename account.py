@@ -8,15 +8,17 @@ import json
 import os
 import secrets
 
-from logger import log_login, log_register
+from logger import log_event, log_login, log_register
+from runtime import ACCOUNTS_DIR, ensure_runtime_data
 
-ACCOUNT_DIR = "Account_and_password"
+ACCOUNT_DIR = ACCOUNTS_DIR
 DEFAULT_USERNAME = "steve"
 DEFAULT_PASSWORD = "1234asdf"
 
 
 def _ensure_dir():
     """Ensure the account directory exists."""
+    ensure_runtime_data()
     os.makedirs(ACCOUNT_DIR, exist_ok=True)
 
 
@@ -91,6 +93,6 @@ def init_default_account():
     """Create the default 'steve' account if it doesn't exist."""
     if not user_exists(DEFAULT_USERNAME):
         register(DEFAULT_USERNAME, DEFAULT_PASSWORD)
-        print(f"  Created default account: {DEFAULT_USERNAME}")
+        log_event(f"  Created default account: {DEFAULT_USERNAME}")
         return True
     return False

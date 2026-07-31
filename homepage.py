@@ -9,7 +9,7 @@ import random
 import pygame
 
 from account import register, login, init_default_account, hash_password
-from logger import log_login
+from logger import log_event, log_login
 
 # Paths
 HOME_BG_DIR = "image/Homepage_background"
@@ -37,13 +37,16 @@ DEFAULT_PASS = "1234asdf"
 
 
 class TextInput:
-    """A simple text input field."""
+    """A single-line input field with cursor-aware horizontal scrolling."""
 
-    def __init__(self, x, y, width, height, font, is_password=False):
+    def __init__(self, x, y, width, height, font, is_password=False, max_length=32):
         self.rect = pygame.Rect(x, y, width, height)
         self.font = font
         self.is_password = is_password
+        self.max_length = max_length
         self.text = ""
+        self.cursor_index = 0
+        self.scroll_offset = 0
         self.active = False
         self.cursor_visible = True
         self.last_blink = 0
@@ -51,12 +54,35 @@ class TextInput:
     def handle_event(self, event):
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             self.active = self.rect.collidepoint(event.pos)
+            if self.active:
+                display_text = "*" * len(self.text) if self.is_password else self.text
+                relative_x = event.pos[0] - self.rect.x - 8 + self.scroll_offset
+                self.cursor_index = min(
+                    range(len(display_text) + 1),
+                    key=lambda index: abs(self.font.size(display_text[:index])[0] - relative_x),
+                )
         if event.type == pygame.KEYDOWN and self.active:
             if event.key == pygame.K_BACKSPACE:
-                self.text = self.text[:-1]
+                if self.cursor_index > 0:
+                    self.text = (self.text[:self.cursor_index - 1]
+                                 + self.text[self.cursor_index:])
+                    self.cursor_index -= 1
+            elif event.key == pygame.K_DELETE:
+                self.text = (self.text[:self.cursor_index]
+                             + self.text[self.cursor_index + 1:])
+            elif event.key == pygame.K_LEFT:
+                self.cursor_index = max(0, self.cursor_index - 1)
+            elif event.key == pygame.K_RIGHT:
+                self.cursor_index = min(len(self.text), self.cursor_index + 1)
+            elif event.key == pygame.K_HOME:
+                self.cursor_index = 0
+            elif event.key == pygame.K_END:
+                self.cursor_index = len(self.text)
             else:
-                if event.unicode.isprintable() and len(self.text) < 32:
-                    self.text += event.unicode
+                if event.unicode.isprintable() and len(self.text) < self.max_length:
+                    self.text = (self.text[:self.cursor_index] + event.unicode
+                                 + self.text[self.cursor_index:])
+                    self.cursor_index += len(event.unicode)
         return None
 
     def update(self):
@@ -72,11 +98,26 @@ class TextInput:
         display_text = self.text
         if self.is_password:
             display_text = "*" * len(self.text)
+        visible_width = self.rect.width - 16
+        cursor_width = self.font.size(display_text[:self.cursor_index])[0]
+        text_width = self.font.size(display_text)[0]
+        if cursor_width - self.scroll_offset > visible_width:
+            self.scroll_offset = cursor_width - visible_width
+        elif cursor_width < self.scroll_offset:
+            self.scroll_offset = cursor_width
+        self.scroll_offset = max(0, min(self.scroll_offset, max(0, text_width - visible_width)))
+
         text_surf = self.font.render(display_text, True, TEXT_COLOR)
-        text_rect = text_surf.get_rect(midleft=(self.rect.x + 8, self.rect.centery))
+        viewport = pygame.Rect(self.rect.x + 8, self.rect.y + 4,
+                               visible_width, self.rect.height - 8)
+        previous_clip = screen.get_clip()
+        screen.set_clip(viewport)
+        text_rect = text_surf.get_rect(midleft=(viewport.x - self.scroll_offset,
+                                                self.rect.centery))
         screen.blit(text_surf, text_rect)
+        screen.set_clip(previous_clip)
         if self.active and self.cursor_visible:
-            cursor_x = text_rect.right + 2
+            cursor_x = viewport.x + cursor_width - self.scroll_offset
             pygame.draw.line(screen, TEXT_COLOR,
                              (cursor_x, self.rect.y + 6),
                              (cursor_x, self.rect.bottom - 6), 2)
@@ -108,7 +149,10 @@ class Button:
         pygame.draw.rect(screen, ACCENT_COLOR, self.rect, 2, border_radius=6)
         text_surf = self.font.render(self.text, True, TEXT_COLOR)
         text_rect = text_surf.get_rect(center=self.rect.center)
+        previous_clip = screen.get_clip()
+        screen.set_clip(self.rect.inflate(-8, -4))
         screen.blit(text_surf, text_rect)
+        screen.set_clip(previous_clip)
 
 
 def load_translations():
@@ -116,7 +160,7 @@ def load_translations():
         with open(TRANSLATE_PATH, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
-        print(f"Warning: failed to load translations: {e}")
+        log_event(f"Warning: failed to load translations: {e}")
         return {"language": "zh", "gui": {}, "blocks": {}}
 
 
@@ -194,8 +238,10 @@ def homepage(screen, screen_width, screen_height):
                        "", button_font)
     register_btn = Button(column_x, input_start_y + 200, BUTTON_WIDTH, BUTTON_HEIGHT,
                           "", button_font)
-    settings_btn = Button(column_x, input_start_y + 270, BUTTON_WIDTH, BUTTON_HEIGHT,
+    settings_btn = Button(column_x, input_start_y + 260, BUTTON_WIDTH, 40,
                           "", button_font)
+    quit_btn = Button(column_x, input_start_y + 310, BUTTON_WIDTH, 40,
+                      "", button_font)
 
     inputs = [username_input, password_input]
     focused = 0
@@ -204,6 +250,9 @@ def homepage(screen, screen_width, screen_height):
     show_modal = False
     modal_confirm_btn = Button(0, 0, 120, 40, "", button_font)
     modal_cancel_btn = Button(0, 0, 120, 40, "", button_font)
+    show_quit_modal = False
+    quit_confirm_btn = Button(0, 0, 120, 40, "", button_font)
+    quit_cancel_btn = Button(0, 0, 120, 40, "", button_font)
 
     message = ""
     message_color = SUCCESS_COLOR
@@ -223,6 +272,7 @@ def homepage(screen, screen_width, screen_height):
         login_btn.set_text(t(trans, "homepage_login", lang))
         register_btn.set_text(t(trans, "homepage_register", lang))
         settings_btn.set_text(t(trans, "homepage_settings", lang))
+        quit_btn.set_text(t(trans, "homepage_quit", lang))
         title_text = t(trans, "homepage_title", lang)
         subtitle_text = t(trans, "homepage_copyright", lang)
 
@@ -230,6 +280,9 @@ def homepage(screen, screen_width, screen_height):
         modal_text = t(trans, "homepage_default_login", lang)
         modal_confirm_btn.set_text(t(trans, "homepage_confirm", lang))
         modal_cancel_btn.set_text(t(trans, "homepage_cancel", lang))
+        quit_modal_text = t(trans, "homepage_quit_confirm", lang)
+        quit_confirm_btn.set_text(t(trans, "homepage_confirm", lang))
+        quit_cancel_btn.set_text(t(trans, "homepage_cancel", lang))
 
         # Event handling
         for event in pygame.event.get():
@@ -237,8 +290,9 @@ def homepage(screen, screen_width, screen_height):
                 return None
 
             elif event.type == pygame.KEYDOWN:
-                # Ctrl+L toggles language (only when modal not open)
-                if event.key == pygame.K_l and (event.mod & pygame.KMOD_CTRL) and not show_modal:
+                # Ctrl+L toggles language (only when no modal is open)
+                if event.key == pygame.K_l and (event.mod & pygame.KMOD_CTRL) \
+                        and not show_modal and not show_quit_modal:
                     lang = "en" if lang == "zh" else "zh"
                     message = ""
                 elif show_modal:
@@ -250,8 +304,14 @@ def homepage(screen, screen_width, screen_height):
                         pwd_hash, salt = hash_password(DEFAULT_PASS)
                         log_login(DEFAULT_USER, pwd_hash, salt, True)
                         return (DEFAULT_USER, lang, settings, screen_width, screen_height)
+                elif show_quit_modal:
+                    # Quit modal: Esc cancels, Enter confirms.
+                    if event.key == pygame.K_ESCAPE:
+                        show_quit_modal = False
+                    elif event.key == pygame.K_RETURN:
+                        return None
                 elif event.key == pygame.K_ESCAPE:
-                    return None
+                    show_quit_modal = True
                 elif event.key == pygame.K_TAB:
                     focused = (focused + 1) % len(inputs)
                     for i, inp in enumerate(inputs):
@@ -294,6 +354,7 @@ def homepage(screen, screen_width, screen_height):
                 login_btn.rect.x = column_x
                 register_btn.rect.x = column_x
                 settings_btn.rect.x = column_x
+                quit_btn.rect.x = column_x
 
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if show_modal:
@@ -306,6 +367,11 @@ def homepage(screen, screen_width, screen_height):
                                 screen_width, screen_height)
                     elif modal_cancel_btn.handle_event(event):
                         show_modal = False
+                elif show_quit_modal:
+                    if quit_confirm_btn.handle_event(event):
+                        return None
+                    elif quit_cancel_btn.handle_event(event):
+                        show_quit_modal = False
                 else:
                     for i, inp in enumerate(inputs):
                         inp.handle_event(event)
@@ -360,18 +426,24 @@ def homepage(screen, screen_width, screen_height):
                         center_x = screen_width // 2
                         column_x = center_x - BUTTON_WIDTH // 2
                         for obj in (username_input, password_input,
-                                    login_btn, register_btn, settings_btn):
+                                    login_btn, register_btn, settings_btn, quit_btn):
                             obj.rect.x = column_x
                         message = ""
+                    elif quit_btn.handle_event(event):
+                        show_quit_modal = True
 
             elif event.type == pygame.MOUSEMOTION:
                 if show_modal:
                     modal_confirm_btn.handle_event(event)
                     modal_cancel_btn.handle_event(event)
+                elif show_quit_modal:
+                    quit_confirm_btn.handle_event(event)
+                    quit_cancel_btn.handle_event(event)
                 else:
                     login_btn.handle_event(event)
                     register_btn.handle_event(event)
                     settings_btn.handle_event(event)
+                    quit_btn.handle_event(event)
 
         # --- RENDER ---
         if bg_scaled:
@@ -404,11 +476,12 @@ def homepage(screen, screen_width, screen_height):
         login_btn.draw(screen)
         register_btn.draw(screen)
         settings_btn.draw(screen)
+        quit_btn.draw(screen)
 
         # Message
         if message:
             msg_surf = input_font.render(message, True, message_color)
-            msg_rect = msg_surf.get_rect(center=(center_x, input_start_y + 320))
+            msg_rect = msg_surf.get_rect(center=(center_x, input_start_y + 120))
             screen.blit(msg_surf, msg_rect)
 
         # Copyright
@@ -448,6 +521,33 @@ def homepage(screen, screen_width, screen_height):
 
             modal_confirm_btn.draw(screen)
             modal_cancel_btn.draw(screen)
+
+        if show_quit_modal:
+            # Use a separate confirmation dialog for quitting the homepage.
+            dim = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
+            dim.fill((0, 0, 0, 140))
+            screen.blit(dim, (0, 0))
+
+            modal_w = 400
+            modal_h = 160
+            modal_x = center_x - modal_w // 2
+            modal_y = screen_height // 2 - modal_h // 2
+            modal_rect = pygame.Rect(modal_x, modal_y, modal_w, modal_h)
+            pygame.draw.rect(screen, (45, 45, 45), modal_rect, border_radius=10)
+            pygame.draw.rect(screen, ACCENT_COLOR, modal_rect, 2, border_radius=10)
+
+            quit_surf = input_font.render(quit_modal_text, True, TEXT_COLOR)
+            screen.blit(quit_surf, quit_surf.get_rect(
+                center=(center_x, modal_y + 40)))
+
+            btn_gap = 20
+            total_w = 120 * 2 + btn_gap
+            btn_start_x = center_x - total_w // 2
+            btn_y = modal_y + modal_h - 60
+            quit_confirm_btn.rect.topleft = (btn_start_x, btn_y)
+            quit_cancel_btn.rect.topleft = (btn_start_x + 120 + btn_gap, btn_y)
+            quit_confirm_btn.draw(screen)
+            quit_cancel_btn.draw(screen)
 
         pygame.display.flip()
 
