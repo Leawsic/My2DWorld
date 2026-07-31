@@ -43,6 +43,8 @@
     "homepage_input_password": { "zh": "请输入密码", "en": "Enter password" },
     "homepage_password_short": { "zh": "密码长度至少4位", "en": "Password must be 4+ chars" },
     "homepage_settings": { "zh": "设置", "en": "Settings" },
+    "homepage_quit": { "zh": "退出游戏", "en": "Quit Game" },
+    "homepage_quit_confirm": { "zh": "确定退出游戏吗？", "en": "Quit the game?" },
     "settings_title": { "zh": "设置", "en": "Settings" },
     "settings_fullscreen": { "zh": "全屏", "en": "Fullscreen" },
     "settings_language": { "zh": "语言", "en": "Language" },
