@@ -153,7 +153,7 @@ def t(translate_data, key, lang, **kwargs):
 def homepage(screen, screen_width, screen_height):
     """
     Show the homepage/menu.
-    Returns (username, lang) on successful login, or None if quitting.
+    Returns (username, lang, settings) on successful login, or None if quitting.
     """
     clock = pygame.time.Clock()
     font_path = FONT_PATH
@@ -168,9 +168,16 @@ def homepage(screen, screen_width, screen_height):
         button_font = pygame.font.SysFont("Arial", 22)
         input_font = pygame.font.SysFont("Arial", 20)
 
-    # Load translations
+    # Load translations and settings
     trans = load_translations()
-    lang = trans.get("language", "zh")
+    from settings import load_settings, settings_screen
+    settings = load_settings()
+    lang = settings["language"]
+
+    # Apply fullscreen setting
+    if settings["fullscreen"]:
+        screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+        screen_width, screen_height = screen.get_size()
 
     # Load random background
     bg_images = []
@@ -183,6 +190,7 @@ def homepage(screen, screen_width, screen_height):
                 except Exception:
                     pass
 
+    bg_img = None
     if bg_images:
         bg_img = random.choice(bg_images)
         bg_scaled = pygame.transform.scale(bg_img, (screen_width, screen_height))
@@ -210,8 +218,8 @@ def homepage(screen, screen_width, screen_height):
                        "", button_font)
     register_btn = Button(column_x, input_start_y + 200, BUTTON_WIDTH, BUTTON_HEIGHT,
                           "", button_font)
-    lang_btn = Button(column_x, input_start_y + 270, BUTTON_WIDTH, 40,
-                      "", subtitle_font)
+    settings_btn = Button(column_x, input_start_y + 270, BUTTON_WIDTH, 40,
+                          "", subtitle_font)
 
     # Focus management
     inputs = [username_input, password_input]
@@ -238,7 +246,7 @@ def homepage(screen, screen_width, screen_height):
         password_label = t(trans, "homepage_password", lang)
         login_btn.set_text(t(trans, "homepage_login", lang))
         register_btn.set_text(t(trans, "homepage_register", lang))
-        lang_btn.set_text(f"{t(trans, 'debug_lang', lang)} (L)")
+        settings_btn.set_text(t(trans, "homepage_settings", lang))
         title_text = t(trans, "homepage_title", lang)
         subtitle_text = t(trans, "homepage_copyright", lang)
 
@@ -250,12 +258,6 @@ def homepage(screen, screen_width, screen_height):
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     return None  # Quit
-                elif event.key == pygame.K_l:
-                    # Toggle language only if no input box is active
-                    active_input = any(inp.active for inp in inputs)
-                    if not active_input:
-                        lang = "en" if lang == "zh" else "zh"
-                        message = ""
                 elif event.key == pygame.K_TAB:
                     # Switch focus to next input
                     focused = (focused + 1) % len(inputs)
@@ -275,7 +277,7 @@ def homepage(screen, screen_width, screen_height):
                         message = t(trans, "homepage_login_success", lang)
                         message_color = SUCCESS_COLOR
                         pygame.time.delay(500)
-                        return (username, lang)
+                        return (username, lang, settings)
                     else:
                         message = t(trans, "homepage_login_failed", lang)
                         message_color = ERROR_COLOR
@@ -301,7 +303,7 @@ def homepage(screen, screen_width, screen_height):
                 password_input.rect.x = column_x
                 login_btn.rect.x = column_x
                 register_btn.rect.x = column_x
-                lang_btn.rect.x = column_x
+                settings_btn.rect.x = column_x
 
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 # Check buttons
@@ -324,7 +326,7 @@ def homepage(screen, screen_width, screen_height):
                         message = t(trans, "homepage_login_success", lang)
                         message_color = SUCCESS_COLOR
                         pygame.time.delay(500)
-                        return (username, lang)
+                        return (username, lang, settings)
                     else:
                         message = t(trans, "homepage_login_failed", lang)
                         message_color = ERROR_COLOR
@@ -346,14 +348,28 @@ def homepage(screen, screen_width, screen_height):
                     else:
                         message = t(trans, "homepage_register_exists", lang)
                         message_color = ERROR_COLOR
-                elif lang_btn.handle_event(event):
-                    lang = "en" if lang == "zh" else "zh"
+                elif settings_btn.handle_event(event):
+                    result = settings_screen(screen, screen_width, screen_height,
+                                             settings)
+                    if result is None:
+                        return None  # Window closed
+                    settings, screen, screen_width, screen_height = result
+                    lang = settings["language"]
+                    # Re-apply layout to the (possibly fullscreen) display
+                    if bg_img:
+                        bg_scaled = pygame.transform.scale(
+                            bg_img, (screen_width, screen_height))
+                    center_x = screen_width // 2
+                    column_x = center_x - BUTTON_WIDTH // 2
+                    for obj in (username_input, password_input,
+                                login_btn, register_btn, settings_btn):
+                        obj.rect.x = column_x
                     message = ""
 
             elif event.type == pygame.MOUSEMOTION:
                 login_btn.handle_event(event)
                 register_btn.handle_event(event)
-                lang_btn.handle_event(event)
+                settings_btn.handle_event(event)
 
         # --- RENDER ---
         if bg_scaled:
@@ -386,7 +402,7 @@ def homepage(screen, screen_width, screen_height):
         # Draw buttons
         login_btn.draw(screen)
         register_btn.draw(screen)
-        lang_btn.draw(screen)
+        settings_btn.draw(screen)
 
         # Message
         if message:

@@ -41,6 +41,17 @@
     "homepage_register_exists": { "zh": "账号已存在", "en": "Account already exists" },
     "homepage_input_username": { "zh": "请输入账号", "en": "Enter username" },
     "homepage_input_password": { "zh": "请输入密码", "en": "Enter password" },
-    "homepage_password_short": { "zh": "密码长度至少4位", "en": "Password must be 4+ chars" }
+    "homepage_password_short": { "zh": "密码长度至少4位", "en": "Password must be 4+ chars" },
+    "homepage_settings": { "zh": "设置", "en": "Settings" },
+    "settings_title": { "zh": "设置", "en": "Settings" },
+    "settings_fullscreen": { "zh": "全屏", "en": "Fullscreen" },
+    "settings_language": { "zh": "语言", "en": "Language" },
+    "settings_debug_default": { "zh": "默认开启调试", "en": "Debug by default" },
+    "settings_on": { "zh": "开启", "en": "On" },
+    "settings_off": { "zh": "关闭", "en": "Off" },
+    "settings_back": { "zh": "返回", "en": "Back" },
+    "pause_title": { "zh": "游戏暂停", "en": "Paused" },
+    "pause_resume": { "zh": "继续游戏", "en": "Resume" },
+    "pause_quit": { "zh": "退出游戏", "en": "Quit" }
   }
 }
