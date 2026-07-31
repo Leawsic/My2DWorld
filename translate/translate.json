@@ -15,7 +15,7 @@
   "gui": {
     "window_title": { "zh": "My2DWorld - 无限地形探索", "en": "My2DWorld - Infinite Terrain" },
     "mode_spectator": { "zh": "旁观模式", "en": "Spectator Mode" },
-    "controls_hint": { "zh": "WASD:移动 | 滚轮:缩放 | 右键:平移 | L:切换语言 | F3:调试 | F11:全屏 | ESC:退出", "en": "WASD:Move | Scroll:Zoom | RMB:Pan | L:Lang | F3:Debug | F11:FS | ESC:Exit" },
+    "controls_hint": { "zh": "WASD:移动 | 滚轮:缩放 | 右键:平移 | Ctrl+L:切换语言 | F3:调试 | F11:全屏 | ESC:退出", "en": "WASD:Move | Scroll:Zoom | RMB:Pan | Ctrl+L:Lang | F3:Debug | F11:FS | ESC:Exit" },
     "debug_fps": { "zh": "FPS: {fps}", "en": "FPS: {fps}" },
     "debug_player": { "zh": "玩家: ({x:.1f}, {y:.1f})", "en": "Player: ({x:.1f}, {y:.1f})" },
     "debug_camera": { "zh": "相机: ({x:.1f}, {y:.1f})", "en": "Cam: ({x:.1f}, {y:.1f})" },
@@ -52,6 +52,9 @@
     "settings_back": { "zh": "返回", "en": "Back" },
     "pause_title": { "zh": "游戏暂停", "en": "Paused" },
     "pause_resume": { "zh": "继续游戏", "en": "Resume" },
-    "pause_quit": { "zh": "退出游戏", "en": "Quit" }
+    "pause_quit": { "zh": "退出游戏", "en": "Quit" },
+    "homepage_default_login": { "zh": "使用默认账户 steve 登录?", "en": "Login with default account steve?" },
+    "homepage_confirm": { "zh": "确认", "en": "Confirm" },
+    "homepage_cancel": { "zh": "取消", "en": "Cancel" }
   }
 }

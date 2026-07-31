@@ -4,7 +4,6 @@ Displays random background, language toggle, login/register UI.
 """
 
 import json
-import math
 import os
 import random
 import pygame
@@ -17,7 +16,7 @@ TRANSLATE_PATH = "translate/translate.json"
 FONT_PATH = "fonts/LXGWWenKai-Regular.ttf"
 
 # Colors
-BG_COLOR = (30, 30, 30, 180)  # semi-transparent overlay
+BG_COLOR = (30, 30, 30, 180)
 BUTTON_COLOR = (50, 50, 50, 200)
 BUTTON_HOVER = (70, 70, 70, 220)
 INPUT_COLOR = (40, 40, 40, 200)
@@ -31,14 +30,17 @@ BUTTON_HEIGHT = 50
 INPUT_WIDTH = 260
 INPUT_HEIGHT = 40
 
+# Default account
+DEFAULT_USER = "steve"
+DEFAULT_PASS = "1234asdf"
+
 
 class TextInput:
     """A simple text input field."""
 
-    def __init__(self, x, y, width, height, font, label="", is_password=False):
+    def __init__(self, x, y, width, height, font, is_password=False):
         self.rect = pygame.Rect(x, y, width, height)
         self.font = font
-        self.label = label
         self.is_password = is_password
         self.text = ""
         self.active = False
@@ -51,10 +53,6 @@ class TextInput:
         if event.type == pygame.KEYDOWN and self.active:
             if event.key == pygame.K_BACKSPACE:
                 self.text = self.text[:-1]
-            elif event.key == pygame.K_TAB:
-                return "tab"
-            elif event.key == pygame.K_RETURN:
-                return "enter"
             else:
                 if event.unicode.isprintable() and len(self.text) < 32:
                     self.text += event.unicode
@@ -67,45 +65,29 @@ class TextInput:
             self.last_blink = now
 
     def draw(self, screen):
-        # Draw label
-        if self.label:
-            lbl = self.font.render(self.label, True, TEXT_COLOR)
-            screen.blit(lbl, (self.rect.x, self.rect.y - 22))
-
-        # Draw input box
         pygame.draw.rect(screen, INPUT_COLOR, self.rect, border_radius=4)
         pygame.draw.rect(screen, ACCENT_COLOR if self.active else (100, 100, 100),
                          self.rect, 2, border_radius=4)
-
-        # Draw text
         display_text = self.text
         if self.is_password:
             display_text = "*" * len(self.text)
         text_surf = self.font.render(display_text, True, TEXT_COLOR)
-        # Truncate if too long
         text_rect = text_surf.get_rect(midleft=(self.rect.x + 8, self.rect.centery))
         screen.blit(text_surf, text_rect)
-
-        # Draw cursor
         if self.active and self.cursor_visible:
             cursor_x = text_rect.right + 2
             pygame.draw.line(screen, TEXT_COLOR,
                              (cursor_x, self.rect.y + 6),
                              (cursor_x, self.rect.bottom - 6), 2)
 
-    def clear(self):
-        self.text = ""
-        self.active = False
-
 
 class Button:
     """A simple clickable button."""
 
-    def __init__(self, x, y, width, height, text, font, color=BUTTON_COLOR):
+    def __init__(self, x, y, width, height, text, font):
         self.rect = pygame.Rect(x, y, width, height)
         self.text = text
         self.font = font
-        self.color = color
         self.hover = False
 
     def handle_event(self, event):
@@ -120,7 +102,7 @@ class Button:
         self.text = text
 
     def draw(self, screen):
-        color = BUTTON_HOVER if self.hover else self.color
+        color = BUTTON_HOVER if self.hover else BUTTON_COLOR
         pygame.draw.rect(screen, color, self.rect, border_radius=6)
         pygame.draw.rect(screen, ACCENT_COLOR, self.rect, 2, border_radius=6)
         text_surf = self.font.render(self.text, True, TEXT_COLOR)
@@ -129,7 +111,6 @@ class Button:
 
 
 def load_translations():
-    """Load translations from file."""
     try:
         with open(TRANSLATE_PATH, "r", encoding="utf-8") as f:
             return json.load(f)
@@ -139,7 +120,6 @@ def load_translations():
 
 
 def t(translate_data, key, lang, **kwargs):
-    """Get translated text for a gui key."""
     texts = translate_data.get("gui", {}).get(key, {})
     text = texts.get(lang, key)
     if kwargs:
@@ -153,15 +133,15 @@ def t(translate_data, key, lang, **kwargs):
 def homepage(screen, screen_width, screen_height):
     """
     Show the homepage/menu.
-    Returns (username, lang, settings) on successful login, or None if quitting.
+    Returns (username, lang, settings, screen_width, screen_height),
+    or None if quitting.
     """
     clock = pygame.time.Clock()
-    font_path = FONT_PATH
-    if os.path.isfile(font_path):
-        title_font = pygame.font.Font(font_path, 48)
-        subtitle_font = pygame.font.Font(font_path, 18)
-        button_font = pygame.font.Font(font_path, 22)
-        input_font = pygame.font.Font(font_path, 20)
+    if os.path.isfile(FONT_PATH):
+        title_font = pygame.font.Font(FONT_PATH, 48)
+        subtitle_font = pygame.font.Font(FONT_PATH, 18)
+        button_font = pygame.font.Font(FONT_PATH, 22)
+        input_font = pygame.font.Font(FONT_PATH, 20)
     else:
         title_font = pygame.font.SysFont("Arial", 48)
         subtitle_font = pygame.font.SysFont("Arial", 18)
@@ -185,63 +165,58 @@ def homepage(screen, screen_width, screen_height):
         for f in os.listdir(HOME_BG_DIR):
             if f.lower().endswith((".jpg", ".jpeg", ".png")):
                 try:
-                    img = pygame.image.load(os.path.join(HOME_BG_DIR, f))
-                    bg_images.append(img)
+                    bg_images.append(pygame.image.load(os.path.join(HOME_BG_DIR, f)))
                 except Exception:
                     pass
 
     bg_img = None
+    bg_scaled = None
     if bg_images:
         bg_img = random.choice(bg_images)
         bg_scaled = pygame.transform.scale(bg_img, (screen_width, screen_height))
-    else:
-        bg_scaled = None
 
     # Init default account
     init_default_account()
 
-    # UI layout - center column
+    # UI layout
     center_x = screen_width // 2
     column_x = center_x - BUTTON_WIDTH // 2
-
     title_y = screen_height // 6
     input_start_y = title_y + 100
 
-    # Input fields
     username_input = TextInput(column_x, input_start_y, INPUT_WIDTH, INPUT_HEIGHT,
-                               input_font, label="", is_password=False)
+                               input_font, is_password=False)
     password_input = TextInput(column_x, input_start_y + 70, INPUT_WIDTH, INPUT_HEIGHT,
-                               input_font, label="", is_password=True)
+                               input_font, is_password=True)
 
-    # Buttons
     login_btn = Button(column_x, input_start_y + 140, BUTTON_WIDTH, BUTTON_HEIGHT,
                        "", button_font)
     register_btn = Button(column_x, input_start_y + 200, BUTTON_WIDTH, BUTTON_HEIGHT,
                           "", button_font)
-    settings_btn = Button(column_x, input_start_y + 270, BUTTON_WIDTH, 40,
-                          "", subtitle_font)
+    settings_btn = Button(column_x, input_start_y + 270, BUTTON_WIDTH, BUTTON_HEIGHT,
+                          "", button_font)
 
-    # Focus management
     inputs = [username_input, password_input]
     focused = 0
 
-    # Message display
+    # Modal state (for default-steve login confirmation)
+    show_modal = False
+    modal_confirm_btn = Button(0, 0, 120, 40, "", button_font)
+    modal_cancel_btn = Button(0, 0, 120, 40, "", button_font)
+
     message = ""
     message_color = SUCCESS_COLOR
-    message_timer = 0
 
-    # Hide system cursor (we draw our own)
     pygame.mouse.set_visible(True)
 
     running = True
     while running:
-        dt = clock.tick(60) / 16.667
+        clock.tick(60)
 
-        # Update text inputs
         username_input.update()
         password_input.update()
 
-        # Update button labels (support runtime language switch)
+        # Update labels
         username_label = t(trans, "homepage_username", lang)
         password_label = t(trans, "homepage_password", lang)
         login_btn.set_text(t(trans, "homepage_login", lang))
@@ -250,24 +225,40 @@ def homepage(screen, screen_width, screen_height):
         title_text = t(trans, "homepage_title", lang)
         subtitle_text = t(trans, "homepage_copyright", lang)
 
+        # Update modal button labels/text
+        modal_text = t(trans, "homepage_default_login", lang)
+        modal_confirm_btn.set_text(t(trans, "homepage_confirm", lang))
+        modal_cancel_btn.set_text(t(trans, "homepage_cancel", lang))
+
         # Event handling
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 return None
 
             elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    return None  # Quit
+                # Ctrl+L toggles language (only when modal not open)
+                if event.key == pygame.K_l and (event.mod & pygame.KMOD_CTRL) and not show_modal:
+                    lang = "en" if lang == "zh" else "zh"
+                    message = ""
+                elif show_modal:
+                    # Modal open: Esc = cancel, Enter = confirm
+                    if event.key == pygame.K_ESCAPE:
+                        show_modal = False
+                    elif event.key == pygame.K_RETURN:
+                        show_modal = False
+                        return (DEFAULT_USER, lang, settings, screen_width, screen_height)
+                elif event.key == pygame.K_ESCAPE:
+                    return None
                 elif event.key == pygame.K_TAB:
-                    # Switch focus to next input
                     focused = (focused + 1) % len(inputs)
                     for i, inp in enumerate(inputs):
                         inp.active = (i == focused)
                 elif event.key == pygame.K_RETURN:
-                    # Trigger login
                     username = username_input.text.strip()
                     password = password_input.text.strip()
-                    if not username:
+                    if not username and not password:
+                        show_modal = True
+                    elif not username:
                         message = t(trans, "homepage_input_username", lang)
                         message_color = ERROR_COLOR
                     elif not password:
@@ -277,26 +268,22 @@ def homepage(screen, screen_width, screen_height):
                         message = t(trans, "homepage_login_success", lang)
                         message_color = SUCCESS_COLOR
                         pygame.time.delay(500)
-                        return (username, lang, settings)
+                        return (username, lang, settings, screen_width, screen_height)
                     else:
                         message = t(trans, "homepage_login_failed", lang)
                         message_color = ERROR_COLOR
                 else:
-                    # Route to active input
                     for inp in inputs:
                         if inp.active:
                             inp.handle_event(event)
 
-            elif event.type == pygame.VIDEORESIZE:
+            elif event.type == pygame.VIDEORESIZE and not settings["fullscreen"]:
                 screen_width, screen_height = event.w, event.h
                 screen = pygame.display.set_mode(
-                    (screen_width, screen_height), pygame.RESIZABLE
-                )
-                # Re-scale background
+                    (screen_width, screen_height), pygame.RESIZABLE)
                 if bg_img:
                     bg_scaled = pygame.transform.scale(bg_img,
                                                        (screen_width, screen_height))
-                # Re-center UI
                 center_x = screen_width // 2
                 column_x = center_x - BUTTON_WIDTH // 2
                 username_input.rect.x = column_x
@@ -306,70 +293,80 @@ def homepage(screen, screen_width, screen_height):
                 settings_btn.rect.x = column_x
 
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                # Check buttons
-                for i, inp in enumerate(inputs):
-                    result = inp.handle_event(event)
-                    if result == "tab":
-                        focused = (i + 1) % len(inputs)
-                        for j, ip in enumerate(inputs):
-                            ip.active = (j == focused)
-                if login_btn.handle_event(event):
-                    username = username_input.text.strip()
-                    password = password_input.text.strip()
-                    if not username:
-                        message = t(trans, "homepage_input_username", lang)
-                        message_color = ERROR_COLOR
-                    elif not password:
-                        message = t(trans, "homepage_input_password", lang)
-                        message_color = ERROR_COLOR
-                    elif login(username, password):
-                        message = t(trans, "homepage_login_success", lang)
-                        message_color = SUCCESS_COLOR
-                        pygame.time.delay(500)
-                        return (username, lang, settings)
-                    else:
-                        message = t(trans, "homepage_login_failed", lang)
-                        message_color = ERROR_COLOR
-                elif register_btn.handle_event(event):
-                    username = username_input.text.strip()
-                    password = password_input.text.strip()
-                    if not username:
-                        message = t(trans, "homepage_input_username", lang)
-                        message_color = ERROR_COLOR
-                    elif not password:
-                        message = t(trans, "homepage_input_password", lang)
-                        message_color = ERROR_COLOR
-                    elif len(password) < 4:
-                        message = t(trans, "homepage_password_short", lang)
-                        message_color = ERROR_COLOR
-                    elif register(username, password):
-                        message = t(trans, "homepage_register_success", lang)
-                        message_color = SUCCESS_COLOR
-                    else:
-                        message = t(trans, "homepage_register_exists", lang)
-                        message_color = ERROR_COLOR
-                elif settings_btn.handle_event(event):
-                    result = settings_screen(screen, screen_width, screen_height,
-                                             settings)
-                    if result is None:
-                        return None  # Window closed
-                    settings, screen, screen_width, screen_height = result
-                    lang = settings["language"]
-                    # Re-apply layout to the (possibly fullscreen) display
-                    if bg_img:
-                        bg_scaled = pygame.transform.scale(
-                            bg_img, (screen_width, screen_height))
-                    center_x = screen_width // 2
-                    column_x = center_x - BUTTON_WIDTH // 2
-                    for obj in (username_input, password_input,
-                                login_btn, register_btn, settings_btn):
-                        obj.rect.x = column_x
-                    message = ""
+                if show_modal:
+                    # Modal buttons
+                    if modal_confirm_btn.handle_event(event):
+                        show_modal = False
+                        return (DEFAULT_USER, lang, settings,
+                                screen_width, screen_height)
+                    elif modal_cancel_btn.handle_event(event):
+                        show_modal = False
+                else:
+                    for i, inp in enumerate(inputs):
+                        inp.handle_event(event)
+                    if login_btn.handle_event(event):
+                        username = username_input.text.strip()
+                        password = password_input.text.strip()
+                        if not username and not password:
+                            show_modal = True
+                        elif not username:
+                            message = t(trans, "homepage_input_username", lang)
+                            message_color = ERROR_COLOR
+                        elif not password:
+                            message = t(trans, "homepage_input_password", lang)
+                            message_color = ERROR_COLOR
+                        elif login(username, password):
+                            message = t(trans, "homepage_login_success", lang)
+                            message_color = SUCCESS_COLOR
+                            pygame.time.delay(500)
+                            return (username, lang, settings,
+                                    screen_width, screen_height)
+                        else:
+                            message = t(trans, "homepage_login_failed", lang)
+                            message_color = ERROR_COLOR
+                    elif register_btn.handle_event(event):
+                        username = username_input.text.strip()
+                        password = password_input.text.strip()
+                        if not username:
+                            message = t(trans, "homepage_input_username", lang)
+                            message_color = ERROR_COLOR
+                        elif not password:
+                            message = t(trans, "homepage_input_password", lang)
+                            message_color = ERROR_COLOR
+                        elif len(password) < 4:
+                            message = t(trans, "homepage_password_short", lang)
+                            message_color = ERROR_COLOR
+                        elif register(username, password):
+                            message = t(trans, "homepage_register_success", lang)
+                            message_color = SUCCESS_COLOR
+                        else:
+                            message = t(trans, "homepage_register_exists", lang)
+                            message_color = ERROR_COLOR
+                    elif settings_btn.handle_event(event):
+                        result = settings_screen(screen, screen_width, screen_height,
+                                                 settings)
+                        if result is None:
+                            return None
+                        settings, screen, screen_width, screen_height = result
+                        lang = settings["language"]
+                        if bg_img:
+                            bg_scaled = pygame.transform.scale(
+                                bg_img, (screen_width, screen_height))
+                        center_x = screen_width // 2
+                        column_x = center_x - BUTTON_WIDTH // 2
+                        for obj in (username_input, password_input,
+                                    login_btn, register_btn, settings_btn):
+                            obj.rect.x = column_x
+                        message = ""
 
             elif event.type == pygame.MOUSEMOTION:
-                login_btn.handle_event(event)
-                register_btn.handle_event(event)
-                settings_btn.handle_event(event)
+                if show_modal:
+                    modal_confirm_btn.handle_event(event)
+                    modal_cancel_btn.handle_event(event)
+                else:
+                    login_btn.handle_event(event)
+                    register_btn.handle_event(event)
+                    settings_btn.handle_event(event)
 
         # --- RENDER ---
         if bg_scaled:
@@ -377,7 +374,6 @@ def homepage(screen, screen_width, screen_height):
         else:
             screen.fill((20, 20, 30))
 
-        # Semi-transparent overlay
         overlay = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
         overlay.fill(BG_COLOR)
         screen.blit(overlay, (0, 0))
@@ -389,17 +385,17 @@ def homepage(screen, screen_width, screen_height):
         screen.blit(shadow, (title_rect.x + 2, title_rect.y + 2))
         screen.blit(title_surf, title_rect)
 
-        # Labels above inputs
+        # Labels
         username_lbl = input_font.render(username_label + ":", True, TEXT_COLOR)
         screen.blit(username_lbl, (column_x, input_start_y - 22))
         password_lbl = input_font.render(password_label + ":", True, TEXT_COLOR)
         screen.blit(password_lbl, (column_x, input_start_y + 48))
 
-        # Draw inputs
+        # Inputs
         username_input.draw(screen)
         password_input.draw(screen)
 
-        # Draw buttons
+        # Buttons
         login_btn.draw(screen)
         register_btn.draw(screen)
         settings_btn.draw(screen)
@@ -414,6 +410,39 @@ def homepage(screen, screen_width, screen_height):
         copy_surf = subtitle_font.render(subtitle_text, True, (150, 150, 150))
         copy_rect = copy_surf.get_rect(center=(center_x, screen_height - 30))
         screen.blit(copy_surf, copy_rect)
+
+        # --- Modal dialog ---
+        if show_modal:
+            # Dim background
+            dim = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
+            dim.fill((0, 0, 0, 140))
+            screen.blit(dim, (0, 0))
+
+            # Modal box
+            modal_w = 400
+            modal_h = 160
+            modal_x = center_x - modal_w // 2
+            modal_y = screen_height // 2 - modal_h // 2
+            modal_rect = pygame.Rect(modal_x, modal_y, modal_w, modal_h)
+            pygame.draw.rect(screen, (45, 45, 45), modal_rect, border_radius=10)
+            pygame.draw.rect(screen, ACCENT_COLOR, modal_rect, 2, border_radius=10)
+
+            # Modal text
+            modal_surf = input_font.render(modal_text, True, TEXT_COLOR)
+            modal_text_rect = modal_surf.get_rect(center=(center_x, modal_y + 40))
+            screen.blit(modal_surf, modal_text_rect)
+
+            # Buttons
+            btn_gap = 20
+            total_w = 120 * 2 + btn_gap
+            btn_start_x = center_x - total_w // 2
+            btn_y = modal_y + modal_h - 60
+
+            modal_confirm_btn.rect.topleft = (btn_start_x, btn_y)
+            modal_cancel_btn.rect.topleft = (btn_start_x + 120 + btn_gap, btn_y)
+
+            modal_confirm_btn.draw(screen)
+            modal_cancel_btn.draw(screen)
 
         pygame.display.flip()
 

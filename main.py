@@ -254,7 +254,7 @@ def start_game(screen, screen_width, screen_height, username, lang, settings):
                 elif event.key == pygame.K_TAB:
                     mode_index = (mode_index + 1) % len(mode_list)
                     game_mode = mode_list[mode_index]
-                elif event.key == pygame.K_l:
+                elif event.key == pygame.K_l and (event.mod & pygame.KMOD_CTRL):
                     current_lang = "en" if current_lang == "zh" else "zh"
                     pygame.display.set_caption(
                         window_title_texts.get(current_lang, "My2DWorld")
@@ -461,7 +461,7 @@ def main():
     )
     pygame.display.set_caption("My2DWorld")
 
-    # Show homepage → returns (username, lang, settings) or None
+    # Show homepage → returns (username, lang, settings, screen_width, screen_height) or None
     result = homepage(screen, screen_width, screen_height)
 
     if result is None:
@@ -469,10 +469,10 @@ def main():
         pygame.quit()
         sys.exit()
 
-    username, lang, settings = result
+    username, lang, settings, actual_width, actual_height = result
 
-    # Start the game
-    start_game(screen, screen_width, screen_height, username, lang, settings)
+    # Start the game with actual screen dimensions (fixes maximize/fullscreen scaling)
+    start_game(screen, actual_width, actual_height, username, lang, settings)
 
     pygame.quit()
     sys.exit()
