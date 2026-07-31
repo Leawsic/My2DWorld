@@ -97,12 +97,12 @@ def load_gui_textures() -> dict:
     return gui
 
 
-def start_game(screen, screen_width, screen_height, username, lang, settings):
+def start_game(screen, screen_width, screen_height, username, lang, settings, world_name):
     """
     Main game loop after successful login.
     Returns "homepage" to return to the main menu, or False to quit the app.
     """
-    log_game_start(username)
+    log_game_start(username, world_name)
 
     # Load configs
     block_config = load_json(BLOCK_CONFIG_PATH)
@@ -419,6 +419,7 @@ def start_game(screen, screen_width, screen_height, username, lang, settings):
             lines = [
                 tref("debug_fps", fps=clock.get_fps()),
                 tref("debug_mode", mode=mode_name),
+                tref("debug_world", name=world_name),
                 tref("debug_player", x=px, y=py),
                 tref("debug_camera", x=camera_x, y=camera_y),
                 tref("debug_mouse", mx=mx, my=my, wx=wx, wy=wy) + hover_debug,
@@ -479,7 +480,7 @@ def main():
     Loops back to the homepage when the user selects "back to menu" from pause."""
     pygame.init()
 
-    # Initialize logging with a system-time-based filename (logs/YYYY-MM-DD_HH-MM-SS.log)
+    # Initialize logging with a system-time-based filename (run/logs/YYYY-MM-DD_HH-MM-SS.log)
     init_log()
 
     screen_width = INITIAL_WIDTH
@@ -502,9 +503,18 @@ def main():
 
         username, lang, settings, actual_width, actual_height = result
 
+        from world_menu import world_menu
+        world_result = world_menu(screen, actual_width, actual_height, username, lang)
+        if world_result is None:
+            break
+        if world_result == "back":
+            screen_width, screen_height = actual_width, actual_height
+            continue
+        world_name, screen, actual_width, actual_height = world_result
+
         # Start the game with actual screen dimensions (fixes maximize/fullscreen scaling)
         game_result = start_game(screen, actual_width, actual_height,
-                                 username, lang, settings)
+                                 username, lang, settings, world_name)
 
         if game_result != "homepage":
             # User quit the app from the pause menu

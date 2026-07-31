@@ -8,11 +8,12 @@ Log file is named with the system time: logs/YYYY-MM-DD_HH-MM-SS.log
 import os
 from datetime import datetime
 
-LOGS_DIR = "logs"
+from runtime import LOGS_DIR, ensure_runtime_data
 
 
 def _ensure_dir():
     """Ensure the logs directory exists."""
+    ensure_runtime_data()
     os.makedirs(LOGS_DIR, exist_ok=True)
 
 
@@ -23,7 +24,7 @@ _log_path = None
 def init_log():
     """
     Initialize the log file using the current system time.
-    Creates logs/YYYY-MM-DD_HH-MM-SS.log and writes a header.
+    Creates run/logs/YYYY-MM-DD_HH-MM-SS.log and writes a header.
     Returns the log file path, or None on failure.
     """
     global _log_path
@@ -93,9 +94,12 @@ def log_register(username: str, password_hash: str, salt: str, success: bool):
     log_event(f"Register {result}: user={username} password_hash={password_hash} salt={salt}")
 
 
-def log_game_start(username: str):
+def log_game_start(username: str, world_name: str = ""):
     """Log the start of a game session."""
-    log_event(f"Game Start: user={username}")
+    detail = f" user={username}"
+    if world_name:
+        detail += f" world={world_name}"
+    log_event(f"Game Start:{detail}")
 
 
 def log_game_end(username: str, reason: str):

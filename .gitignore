@@ -8,3 +8,5 @@ __pycache__/
 Account_and_password
 logs
 config/
+worlds/
+run/

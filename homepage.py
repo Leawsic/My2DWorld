@@ -37,13 +37,16 @@ DEFAULT_PASS = "1234asdf"
 
 
 class TextInput:
-    """A simple text input field."""
+    """A single-line input field with cursor-aware horizontal scrolling."""
 
-    def __init__(self, x, y, width, height, font, is_password=False):
+    def __init__(self, x, y, width, height, font, is_password=False, max_length=32):
         self.rect = pygame.Rect(x, y, width, height)
         self.font = font
         self.is_password = is_password
+        self.max_length = max_length
         self.text = ""
+        self.cursor_index = 0
+        self.scroll_offset = 0
         self.active = False
         self.cursor_visible = True
         self.last_blink = 0
@@ -51,12 +54,35 @@ class TextInput:
     def handle_event(self, event):
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             self.active = self.rect.collidepoint(event.pos)
+            if self.active:
+                display_text = "*" * len(self.text) if self.is_password else self.text
+                relative_x = event.pos[0] - self.rect.x - 8 + self.scroll_offset
+                self.cursor_index = min(
+                    range(len(display_text) + 1),
+                    key=lambda index: abs(self.font.size(display_text[:index])[0] - relative_x),
+                )
         if event.type == pygame.KEYDOWN and self.active:
             if event.key == pygame.K_BACKSPACE:
-                self.text = self.text[:-1]
+                if self.cursor_index > 0:
+                    self.text = (self.text[:self.cursor_index - 1]
+                                 + self.text[self.cursor_index:])
+                    self.cursor_index -= 1
+            elif event.key == pygame.K_DELETE:
+                self.text = (self.text[:self.cursor_index]
+                             + self.text[self.cursor_index + 1:])
+            elif event.key == pygame.K_LEFT:
+                self.cursor_index = max(0, self.cursor_index - 1)
+            elif event.key == pygame.K_RIGHT:
+                self.cursor_index = min(len(self.text), self.cursor_index + 1)
+            elif event.key == pygame.K_HOME:
+                self.cursor_index = 0
+            elif event.key == pygame.K_END:
+                self.cursor_index = len(self.text)
             else:
-                if event.unicode.isprintable() and len(self.text) < 32:
-                    self.text += event.unicode
+                if event.unicode.isprintable() and len(self.text) < self.max_length:
+                    self.text = (self.text[:self.cursor_index] + event.unicode
+                                 + self.text[self.cursor_index:])
+                    self.cursor_index += len(event.unicode)
         return None
 
     def update(self):
@@ -72,11 +98,26 @@ class TextInput:
         display_text = self.text
         if self.is_password:
             display_text = "*" * len(self.text)
+        visible_width = self.rect.width - 16
+        cursor_width = self.font.size(display_text[:self.cursor_index])[0]
+        text_width = self.font.size(display_text)[0]
+        if cursor_width - self.scroll_offset > visible_width:
+            self.scroll_offset = cursor_width - visible_width
+        elif cursor_width < self.scroll_offset:
+            self.scroll_offset = cursor_width
+        self.scroll_offset = max(0, min(self.scroll_offset, max(0, text_width - visible_width)))
+
         text_surf = self.font.render(display_text, True, TEXT_COLOR)
-        text_rect = text_surf.get_rect(midleft=(self.rect.x + 8, self.rect.centery))
+        viewport = pygame.Rect(self.rect.x + 8, self.rect.y + 4,
+                               visible_width, self.rect.height - 8)
+        previous_clip = screen.get_clip()
+        screen.set_clip(viewport)
+        text_rect = text_surf.get_rect(midleft=(viewport.x - self.scroll_offset,
+                                                self.rect.centery))
         screen.blit(text_surf, text_rect)
+        screen.set_clip(previous_clip)
         if self.active and self.cursor_visible:
-            cursor_x = text_rect.right + 2
+            cursor_x = viewport.x + cursor_width - self.scroll_offset
             pygame.draw.line(screen, TEXT_COLOR,
                              (cursor_x, self.rect.y + 6),
                              (cursor_x, self.rect.bottom - 6), 2)
@@ -108,7 +149,10 @@ class Button:
         pygame.draw.rect(screen, ACCENT_COLOR, self.rect, 2, border_radius=6)
         text_surf = self.font.render(self.text, True, TEXT_COLOR)
         text_rect = text_surf.get_rect(center=self.rect.center)
+        previous_clip = screen.get_clip()
+        screen.set_clip(self.rect.inflate(-8, -4))
         screen.blit(text_surf, text_rect)
+        screen.set_clip(previous_clip)
 
 
 def load_translations():
