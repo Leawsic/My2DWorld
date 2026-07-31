@@ -144,11 +144,15 @@ def start_game(screen, screen_width, screen_height, username, lang, settings):
         name_font = pygame.font.Font(FONT_PATH, 20)
         mode_font = pygame.font.Font(FONT_PATH, 18)
         welcome_font = pygame.font.Font(FONT_PATH, 16)
+        pause_title_font = pygame.font.Font(FONT_PATH, 36)
+        pause_button_font = pygame.font.Font(FONT_PATH, 22)
     else:
         debug_font = pygame.font.SysFont("Arial", 14)
         name_font = pygame.font.SysFont("Arial", 20)
         mode_font = pygame.font.SysFont("Arial", 18)
         welcome_font = pygame.font.SysFont("Arial", 16)
+        pause_title_font = pygame.font.SysFont("Arial", 36)
+        pause_button_font = pygame.font.SysFont("Arial", 22)
 
     # Load textures
     textures = load_textures()
@@ -177,6 +181,7 @@ def start_game(screen, screen_width, screen_height, username, lang, settings):
     mode_index = 0
 
     running = True
+    paused = False
     show_debug = settings["debug_default"]
     pygame.mouse.set_visible(False)
 
@@ -190,10 +195,36 @@ def start_game(screen, screen_width, screen_height, username, lang, settings):
         mouse_buttons = pygame.mouse.get_pressed()
         mx, my = pygame.mouse.get_pos()
 
+        pause_button_width = 220
+        pause_button_height = 48
+        resume_rect = pygame.Rect(
+            screen_width // 2 - pause_button_width // 2,
+            screen_height // 2 - 4,
+            pause_button_width,
+            pause_button_height,
+        )
+        quit_rect = pygame.Rect(
+            resume_rect.x,
+            resume_rect.bottom + 14,
+            pause_button_width,
+            pause_button_height,
+        )
+
         # Event handling
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+
+            elif paused:
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    paused = False
+                    pygame.mouse.set_visible(False)
+                elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    if resume_rect.collidepoint(event.pos):
+                        paused = False
+                        pygame.mouse.set_visible(False)
+                    elif quit_rect.collidepoint(event.pos):
+                        running = False
 
             elif event.type == pygame.VIDEORESIZE and not is_fullscreen:
                 screen_width, screen_height = event.w, event.h
@@ -203,10 +234,12 @@ def start_game(screen, screen_width, screen_height, username, lang, settings):
                 )
 
             elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_F3:
+                if event.key == pygame.K_ESCAPE:
+                    paused = True
+                    pygame.mouse.set_visible(True)
+                    is_rmb_dragging = False
+                elif event.key == pygame.K_F3:
                     show_debug = not show_debug
-                elif event.key == pygame.K_ESCAPE:
-                    running = False
                 elif event.key == pygame.K_F11:
                     is_fullscreen = not is_fullscreen
                     if is_fullscreen:
@@ -251,25 +284,28 @@ def start_game(screen, screen_width, screen_height, username, lang, settings):
                         block_size = max(int(new_size), MIN_BLOCK_SIZE)
 
         # Right mouse drag
-        if mouse_buttons[2]:
-            if not is_rmb_dragging:
-                is_rmb_dragging = True
-                rmb_drag_start_mouse = (mx, my)
-                rmb_drag_start_offset = (camera_offset_x, camera_offset_y)
+        if not paused:
+            if mouse_buttons[2]:
+                if not is_rmb_dragging:
+                    is_rmb_dragging = True
+                    rmb_drag_start_mouse = (mx, my)
+                    rmb_drag_start_offset = (camera_offset_x, camera_offset_y)
+                else:
+                    sx0, sy0 = rmb_drag_start_mouse
+                    dx_px = mx - sx0
+                    dy_px = my - sy0
+                    camera_offset_x = rmb_drag_start_offset[0] - dx_px / block_size
+                    camera_offset_y = rmb_drag_start_offset[1] + dy_px / block_size
             else:
-                sx0, sy0 = rmb_drag_start_mouse
-                dx_px = mx - sx0
-                dy_px = my - sy0
-                camera_offset_x = rmb_drag_start_offset[0] - dx_px / block_size
-                camera_offset_y = rmb_drag_start_offset[1] + dy_px / block_size
-        else:
-            if is_rmb_dragging:
-                is_rmb_dragging = False
+                if is_rmb_dragging:
+                    is_rmb_dragging = False
 
-        player.update(keys, dt)
+        if not paused:
+            player.update(keys, dt)
         px, py = player.get_pos()
         adjusted_cam_x = px + camera_offset_x
-        world.update_view(adjusted_cam_x)
+        if not paused:
+            world.update_view(adjusted_cam_x)
         camera_x = adjusted_cam_x
         camera_y = py + camera_offset_y
 
@@ -285,7 +321,7 @@ def start_game(screen, screen_width, screen_height, username, lang, settings):
         world_my = camera_y - (my - cy_off) / block_size
         wx = int(math.floor(world_mx))
         wy = int(math.ceil(world_my))
-        if world_my >= 1:
+        if not paused and world_my >= 1:
             bt = world.get_block(wx, wy)
             if bt:
                 hovered_block = bt
@@ -319,10 +355,11 @@ def start_game(screen, screen_width, screen_height, username, lang, settings):
             screen.blit(name_surf, (nx, ny))
 
         # Custom cursor
-        cursor_key = "mouse_right_spectator" if is_rmb_dragging else "mouse"
-        cursor_img = gui_textures.get(cursor_key)
-        if cursor_img:
-            screen.blit(cursor_img, (mx, my))
+        if not paused:
+            cursor_key = "mouse_right_spectator" if is_rmb_dragging else "mouse"
+            cursor_img = gui_textures.get(cursor_key)
+            if cursor_img:
+                screen.blit(cursor_img, (mx, my))
 
         # Mode label
         mode_name = mode_texts.get(current_lang, "Spectator")
@@ -334,7 +371,7 @@ def start_game(screen, screen_width, screen_height, username, lang, settings):
         screen.blit(mode_surf, (mode_x, mode_y))
 
         # Welcome message (fades out)
-        if welcome_timer > 0:
+        if welcome_timer > 0 and not paused:
             welcome_timer -= 1
             alpha = min(255, welcome_timer * 2)
             welcome_surf = welcome_font.render(welcome_msg, True, (255, 255, 200))
@@ -379,6 +416,32 @@ def start_game(screen, screen_width, screen_height, username, lang, settings):
                 shadow = debug_font.render(line, True, (0, 0, 0))
                 screen.blit(shadow, (11, 11 + i * 18))
                 screen.blit(text_surf, (10, 10 + i * 18))
+
+        if paused:
+            overlay = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, 150))
+            screen.blit(overlay, (0, 0))
+
+            def pause_text(key, fallback):
+                return gui_section.get(key, {}).get(current_lang, fallback)
+
+            title_surf = pause_title_font.render(
+                pause_text("pause_title", "Paused"), True, (255, 255, 255)
+            )
+            screen.blit(title_surf, title_surf.get_rect(
+                center=(screen_width // 2, screen_height // 2 - 62)
+            ))
+
+            for rect, label in (
+                (resume_rect, pause_text("pause_resume", "Resume")),
+                (quit_rect, pause_text("pause_quit", "Quit")),
+            ):
+                hovered = rect.collidepoint((mx, my))
+                color = (70, 70, 70) if hovered else (50, 50, 50)
+                pygame.draw.rect(screen, color, rect, border_radius=6)
+                pygame.draw.rect(screen, (100, 200, 255), rect, 2, border_radius=6)
+                label_surf = pause_button_font.render(label, True, (255, 255, 255))
+                screen.blit(label_surf, label_surf.get_rect(center=rect.center))
 
         pygame.display.flip()
 
