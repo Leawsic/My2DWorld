@@ -96,7 +96,7 @@ def load_gui_textures() -> dict:
     return gui
 
 
-def start_game(screen, screen_width, screen_height, username, lang):
+def start_game(screen, screen_width, screen_height, username, lang, settings):
     """
     Main game loop after successful login.
     """
@@ -133,7 +133,7 @@ def start_game(screen, screen_width, screen_height, username, lang):
     welcome_texts = gui_section.get("welcome", {})
     current_lang = lang
 
-    is_fullscreen = False
+    is_fullscreen = settings["fullscreen"]
 
     pygame.display.set_caption(window_title_texts.get(current_lang, "My2DWorld"))
     clock = pygame.time.Clock()
@@ -177,7 +177,7 @@ def start_game(screen, screen_width, screen_height, username, lang):
     mode_index = 0
 
     running = True
-    show_debug = True
+    show_debug = settings["debug_default"]
     pygame.mouse.set_visible(False)
 
     # Welcome message timer
@@ -398,7 +398,7 @@ def main():
     )
     pygame.display.set_caption("My2DWorld")
 
-    # Show homepage → returns (username, lang) or None
+    # Show homepage → returns (username, lang, settings) or None
     result = homepage(screen, screen_width, screen_height)
 
     if result is None:
@@ -406,10 +406,10 @@ def main():
         pygame.quit()
         sys.exit()
 
-    username, lang = result
+    username, lang, settings = result
 
     # Start the game
-    start_game(screen, screen_width, screen_height, username, lang)
+    start_game(screen, screen_width, screen_height, username, lang, settings)
 
     pygame.quit()
     sys.exit()
