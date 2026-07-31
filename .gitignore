@@ -4,5 +4,4 @@ __pycache__/
 .vscode/
 *.log
 .idea
-Account_and_password
 .codegraph
