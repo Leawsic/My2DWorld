@@ -14,6 +14,7 @@ from player import Player
 from homepage import homepage
 from logger import init_log, log_event, log_game_start, log_game_end, log_pause, log_resume
 from gamemodes import SPECTATOR, CREATIVE, MODE_LIST, create_mode
+from runtime import WORLDS_DIR, ensure_runtime_data
 
 # Constants
 INITIAL_WIDTH = 1024
@@ -75,6 +76,52 @@ def get_texture_or_fallback(textures: dict, block_type: str,
     surf.fill(color)
     pygame.draw.rect(surf, (0, 0, 0), surf.get_rect(), 1)
     return surf
+
+
+def world_save_path(username: str, world_name: str) -> str:
+    """Get the save file path for a world (under run/worlds/)."""
+    safe_user = "".join(c for c in username if c.isalnum() or c in ("-", "_"))
+    safe_world = "".join(c for c in world_name if c.isalnum() or c in ("-", "_"))
+    return os.path.join(WORLDS_DIR, f"{safe_user or 'player'}_{safe_world or 'world'}.json")
+
+
+def load_world_save(username: str, world_name: str):
+    """
+    Load a world save file.
+    Returns dict with 'player_x', 'player_y', 'broken_blocks' or None if absent.
+    """
+    path = world_save_path(username, world_name)
+    if not os.path.isfile(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data
+    except Exception as e:
+        log_event(f"Warning: failed to load save {path}: {e}")
+        return None
+
+
+def save_world_state(username: str, world_name: str, player, world):
+    """
+    Save player position (center) and broken block coordinates to disk.
+    """
+    ensure_runtime_data()
+    os.makedirs(WORLDS_DIR, exist_ok=True)
+    px, py = player.get_pos()
+    data = {
+        "player_x": px,
+        "player_y": py,
+        "broken_blocks": [[bx, by] for bx, by in sorted(world.broken_blocks)],
+    }
+    path = world_save_path(username, world_name)
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        log_event(f"World Saved: user={username} world={world_name} "
+                  f"pos=({px:.1f},{py:.1f}) blocks={len(world.broken_blocks)}")
+    except Exception as e:
+        log_event(f"Warning: failed to save world {path}: {e}")
 
 
 def load_gui_textures() -> dict:
@@ -164,8 +211,23 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
 
     # Create world and player
     world = World(view_distance_chunks=VIEW_DISTANCE_CHUNKS)
-    start_surface = world.get_surface_height(0)
-    player = Player(start_x=0, start_y=start_surface + 3)
+
+    # Load saved world state (player position + broken blocks)
+    save_data = load_world_save(username, world_name)
+    if save_data:
+        try:
+            start_px = float(save_data.get("player_x", 0))
+            start_py = float(save_data.get("player_y", 0))
+        except (TypeError, ValueError):
+            start_px, start_py = 0, 0
+        broken = save_data.get("broken_blocks", [])
+        world.apply_broken_blocks(broken if isinstance(broken, list) else [])
+        log_event(f"World Loaded: user={username} world={world_name} "
+                  f"pos=({start_px:.1f},{start_py:.1f}) blocks={len(world.broken_blocks)}")
+    else:
+        start_px, start_py = 0, world.get_surface_height(0) + 3
+
+    player = Player(start_x=start_px, start_y=start_py)
     world.update_view(player.x)
 
     # Zoom state
@@ -185,6 +247,7 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
     result = False  # Return value: False = quit app, "homepage" = back to menu
     paused = False
     show_debug = settings["debug_default"]
+    pending_f3_toggle = False  # delayed F3 debug toggle (avoids F3+F4 conflict)
     pygame.mouse.set_visible(False)
 
     # Welcome message timer
@@ -255,12 +318,20 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
                     is_rmb_dragging = False
                     log_pause(username)
                 elif event.key == pygame.K_F3:
-                    show_debug = not show_debug
-                elif event.key == pygame.K_F4 and (keys[pygame.K_F3] or event.mod & pygame.KMOD_CTRL):
-                    # F3+F4: switch between spectator and creative modes
-                    new_mode_name = CREATIVE if current_mode.name == SPECTATOR else SPECTATOR
-                    log_event(f"Mode Switch: user={username} from={current_mode.name} to={new_mode_name}")
-                    current_mode = create_mode(new_mode_name, player, world, textures, username)
+                    # Delay the debug toggle so that F3+F4 (mode switch)
+                    # does not also toggle the debug overlay.
+                    pending_f3_toggle = True
+                elif event.key == pygame.K_F4:
+                    # F3+F4 or Ctrl+F4: switch between spectator and creative modes.
+                    if keys[pygame.K_F3] or (event.mod & pygame.KMOD_CTRL):
+                        pending_f3_toggle = False  # cancel debug toggle
+                        new_mode_name = CREATIVE if current_mode.name == SPECTATOR else SPECTATOR
+                        log_event(f"Mode Switch: user={username} from={current_mode.name} to={new_mode_name}")
+                        current_mode = create_mode(new_mode_name, player, world, textures, username)
+                        # Reset camera offsets so the view centers on the player again.
+                        camera_offset_x = 0.0
+                        camera_offset_y = 0.0
+                        is_rmb_dragging = False
                 elif event.key == pygame.K_F11:
                     is_fullscreen = not is_fullscreen
                     if is_fullscreen:
@@ -300,6 +371,11 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
                     new_size = block_size / ZOOM_FACTOR
                     if new_size >= MIN_BLOCK_SIZE:
                         block_size = max(int(new_size), MIN_BLOCK_SIZE)
+
+        # Apply pending debug overlay toggle (set by F3, cancelled by F3+F4)
+        if pending_f3_toggle:
+            pending_f3_toggle = False
+            show_debug = not show_debug
 
         # Right mouse drag: only in spectator mode
         if not paused and current_mode.name == SPECTATOR:
@@ -489,6 +565,9 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
                 screen.blit(label_surf, label_surf.get_rect(center=rect.center))
 
         pygame.display.flip()
+
+    # Save world state (player position + broken blocks) before exiting
+    save_world_state(username, world_name, player, world)
 
     # Log game end before returning
     if result == "homepage":

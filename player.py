@@ -24,9 +24,11 @@ GRAVITY = 14.0              # downward acceleration (blocks/sec²)
 FLY_HOLD_TIME = 3.0         # seconds of holding space to toggle flying
 
 # Collision box (relative to player center)
-BODY_HALF_WIDTH = 0.25      # half a block wide total (0.5 wide)
-BODY_HEIGHT = 2.0           # two blocks tall
-BODY_FOOT_OFFSET = 1.0      # distance from center to feet
+# Width: 0.5 blocks, Height: 1.9 blocks, centered exactly on the sprite center.
+BODY_HALF_WIDTH = 0.25      # half the width (0.5 total)
+BODY_HALF_HEIGHT = 0.95     # half the height (1.9 total)
+BODY_HEIGHT = 1.9           # total height in blocks
+BODY_FOOT_OFFSET = 0.95     # distance from center to feet (half height)
 
 # Player textures
 PLAYER_TEXTURE_DIR = "image/player"
@@ -66,7 +68,7 @@ class Player:
     World Y increases upward.
     """
 
-    def __init__(self, start_x: int = 0, start_y: int = 50):
+    def __init__(self, start_x: float = 0, start_y: float = 50):
         self.x = float(start_x)
         self.y = float(start_y)
 
@@ -131,11 +133,10 @@ class Player:
     def get_collision_rect(self):
         """
         Return world-space collision rectangle as (left, bottom, width, height).
-        Box is centered horizontally, extends 1 block below center
-        and 1 block above center (2 blocks tall).
+        Box is centered exactly on the sprite center: 0.5 wide and 1.9 tall.
         """
         left = self.x - BODY_HALF_WIDTH
-        bottom = self.y - BODY_FOOT_OFFSET
+        bottom = self.y - BODY_HALF_HEIGHT
         return left, bottom, BODY_HALF_WIDTH * 2, BODY_HEIGHT
 
     def reset(self, start_x=0, start_y=50):
@@ -170,13 +171,13 @@ class Player:
         frame = self.get_current_frame()
         if frame is None:
             return
-        # Scale to 1 block wide, 2 blocks tall (matching the collision box).
-        target_w = block_size
-        target_h = block_size * 2
+        # Textures are 64x64. Scale to 1.9 blocks tall keeping aspect ratio,
+        # and center on the player position (= collision box center).
+        target_h = block_size * BODY_HEIGHT
         fw, fh = frame.get_size()
         if fw <= 0 or fh <= 0:
             return
-        scale = max(target_w / fw, target_h / fh)
+        scale = target_h / fh
         scaled_w = max(1, int(fw * scale))
         scaled_h = max(1, int(fh * scale))
         img = pygame.transform.scale(frame, (scaled_w, scaled_h))
@@ -341,8 +342,9 @@ class Player:
         """Advance animation state based on actual movement (velocity)."""
         moving = False
         if self.flying:
-            # In flight: animate if any directional velocity is present.
-            moving = (abs(self.velocity_x) > 0.05 or abs(self.velocity_y) > 0.05)
+            # In flight: animate only when moving horizontally.
+            # Vertical-only movement (W/S) keeps the stand frame.
+            moving = (abs(self.velocity_x) > 0.05)
         else:
             # Grounded: animate only when walking horizontally on ground.
             if self.on_ground and abs(self.velocity_x) > 0.05:

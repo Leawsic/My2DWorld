@@ -161,6 +161,8 @@ class World:
         self.view_distance = view_distance_chunks
         self.chunks: dict[int, Chunk] = {}
         self.last_center_chunk = None
+        # Record of broken blocks: set of (x, y) coordinates.
+        self.broken_blocks: set[tuple[int, int]] = set()
 
     def _get_chunk_x(self, world_x: float) -> int:
         """Get the chunk index for a world x coordinate."""
@@ -169,7 +171,12 @@ class World:
     def _load_chunk(self, chunk_x: int):
         """Load a chunk if not already loaded."""
         if chunk_x not in self.chunks:
-            self.chunks[chunk_x] = Chunk(chunk_x)
+            chunk = Chunk(chunk_x)
+            self.chunks[chunk_x] = chunk
+            # Re-apply any saved broken blocks that fall inside this chunk.
+            for bx, by in list(self.broken_blocks):
+                if chunk.x_start <= bx < chunk.x_end:
+                    chunk.remove_block(bx, by)
 
     def _unload_distant_chunks(self, center_chunk: int):
         """Unload chunks that are too far from the center."""
@@ -211,7 +218,26 @@ class World:
         chunk = self.chunks.get(cx)
         if chunk is None:
             return None
-        return chunk.remove_block(x, y)
+        removed = chunk.remove_block(x, y)
+        if removed:
+            self.broken_blocks.add((x, y))
+        return removed
+
+    def apply_broken_blocks(self, broken_list):
+        """
+        Apply broken-block data loaded from a save file.
+        broken_list: list of [x, y] pairs (coordinates of previously removed blocks).
+        """
+        for item in broken_list:
+            try:
+                bx, by = int(item[0]), int(item[1])
+            except (TypeError, ValueError, IndexError):
+                continue
+            cx = self._get_chunk_x(bx)
+            chunk = self.chunks.get(cx)
+            if chunk:
+                chunk.remove_block(bx, by)
+            self.broken_blocks.add((bx, by))
 
     def get_surface_height(self, x: int) -> int:
         """Get surface height at world column x."""
