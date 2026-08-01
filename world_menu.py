@@ -8,7 +8,9 @@ import pygame
 
 from homepage import (
     ACCENT_COLOR,
+    ACTIVE_COLOR,
     BG_COLOR,
+    BUTTON_COLOR,
     BUTTON_HEIGHT,
     BUTTON_WIDTH,
     ERROR_COLOR,
@@ -76,6 +78,7 @@ def world_menu(screen, screen_width, screen_height, username, lang):
     scroll_index = 0
     editing_index = None
     creating_world = False
+    new_mode = "spectator"          # selected mode for world creation
     message = ""
     world_name_input = TextInput(0, 0, BUTTON_WIDTH, 40, input_font,
                                  max_length=MAX_WORLD_NAME_LENGTH)
@@ -123,15 +126,31 @@ def world_menu(screen, screen_width, screen_height, username, lang):
                                 BUTTON_WIDTH, 40, "", button_font)
             confirm_btn.set_text(t(trans, "world_edit_confirm", lang))
             cancel_btn.set_text(t(trans, "world_cancel", lang))
+
+            # Mode selection: two toggle buttons side by side.
+            mode_half_width = (BUTTON_WIDTH - 10) // 2
+            mode_label_y = content_y + 212
+            spec_mode_btn = Button(center_x - BUTTON_WIDTH // 2, mode_label_y,
+                                   mode_half_width, 40, "", button_font)
+            crea_mode_btn = Button(spec_mode_btn.rect.right + 10, mode_label_y,
+                                   mode_half_width, 40, "", button_font)
+            spec_mode_btn.set_text(t(trans, "world_mode_spectator", lang))
+            crea_mode_btn.set_text(t(trans, "world_mode_creative", lang))
+            spec_mode_btn.color = ACTIVE_COLOR if new_mode == "spectator" else BUTTON_COLOR
+            crea_mode_btn.color = ACTIVE_COLOR if new_mode == "creative" else BUTTON_COLOR
         else:
             confirm_btn = cancel_btn = None
+            spec_mode_btn = crea_mode_btn = None
 
         mouse_pos = pygame.mouse.get_pos()
         buttons = [create_btn, back_btn]
         for _, enter_btn, edit_btn, delete_btn in row_controls:
             buttons.extend((enter_btn, edit_btn, delete_btn))
         if confirm_btn:
-            buttons.extend((confirm_btn, cancel_btn))
+            assert cancel_btn is not None
+            assert spec_mode_btn is not None
+            assert crea_mode_btn is not None
+            buttons.extend((confirm_btn, cancel_btn, spec_mode_btn, crea_mode_btn))
         for button in buttons:
             button.hover = button.rect.collidepoint(mouse_pos)
 
@@ -170,11 +189,12 @@ def world_menu(screen, screen_width, screen_height, username, lang):
                         message = t(trans, "world_name_exists", lang)
                     else:
                         worlds[editing_index]["name"] = new_name
+                        worlds[editing_index]["mode"] = new_mode
                         if save_worlds(username, worlds):
                             event_name = "World Created" if creating_world else "World Renamed"
-                            log_event(f"{event_name}: user={username} world={new_name}")
+                            log_event(f"{event_name}: user={username} world={new_name} mode={new_mode}")
                             if creating_world:
-                                return new_name, screen, screen_width, screen_height
+                                return new_name, new_mode, screen, screen_width, screen_height
                             editing_index = None
                             creating_world = False
                             world_name_input.active = False
@@ -187,9 +207,19 @@ def world_menu(screen, screen_width, screen_height, username, lang):
 
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if editing_index is not None:
+                    assert confirm_btn is not None
+                    assert cancel_btn is not None
+                    assert spec_mode_btn is not None
+                    assert crea_mode_btn is not None
                     world_name_input.handle_event(event)
                     world_name_input.text = world_name_input.text[:MAX_WORLD_NAME_LENGTH]
-                    if confirm_btn.handle_event(event):
+                    if spec_mode_btn and spec_mode_btn.handle_event(event):
+                        new_mode = "spectator"
+                        message = ""
+                    elif crea_mode_btn and crea_mode_btn.handle_event(event):
+                        new_mode = "creative"
+                        message = ""
+                    elif confirm_btn.handle_event(event):
                         new_name = world_name_input.text.strip()
                         if not new_name:
                             message = t(trans, "world_name_required", lang)
@@ -198,11 +228,12 @@ def world_menu(screen, screen_width, screen_height, username, lang):
                             message = t(trans, "world_name_exists", lang)
                         else:
                             worlds[editing_index]["name"] = new_name
+                            worlds[editing_index]["mode"] = new_mode
                             if save_worlds(username, worlds):
                                 event_name = "World Created" if creating_world else "World Renamed"
-                                log_event(f"{event_name}: user={username} world={new_name}")
+                                log_event(f"{event_name}: user={username} world={new_name} mode={new_mode}")
                                 if creating_world:
-                                    return new_name, screen, screen_width, screen_height
+                                    return new_name, new_mode, screen, screen_width, screen_height
                                 editing_index = None
                                 creating_world = False
                                 world_name_input.active = False
@@ -217,7 +248,9 @@ def world_menu(screen, screen_width, screen_height, username, lang):
                         world_name_input.active = False
                         message = ""
                 elif create_btn.handle_event(event):
-                    worlds.append({"name": "", "created_at": datetime.now().isoformat(timespec="seconds")})
+                    worlds.append({"name": "", "mode": "spectator",
+                                   "created_at": datetime.now().isoformat(timespec="seconds")})
+                    new_mode = "spectator"
                     editing_index = len(worlds) - 1
                     creating_world = True
                     world_name_input.text = ""
@@ -230,11 +263,13 @@ def world_menu(screen, screen_width, screen_height, username, lang):
                     for world_index, enter_btn, edit_btn, delete_btn in row_controls:
                         if enter_btn.handle_event(event):
                             name = worlds[world_index]["name"]
-                            log_event(f"World Entered: user={username} world={name}")
-                            return name, screen, screen_width, screen_height
+                            mode = worlds[world_index].get("mode", "spectator")
+                            log_event(f"World Entered: user={username} world={name} mode={mode}")
+                            return name, mode, screen, screen_width, screen_height
                         if edit_btn.handle_event(event):
                             editing_index = world_index
                             creating_world = False
+                            new_mode = worlds[world_index].get("mode", "spectator")
                             world_name_input.text = worlds[world_index]["name"]
                             world_name_input.cursor_index = len(world_name_input.text)
                             world_name_input.active = True
@@ -262,11 +297,20 @@ def world_menu(screen, screen_width, screen_height, username, lang):
         screen.blit(title_surf, title_surf.get_rect(center=(center_x, title_y)))
 
         if confirm_btn is not None:
+            assert cancel_btn is not None
+            assert spec_mode_btn is not None
+            assert crea_mode_btn is not None
             label = input_font.render(t(trans, "world_name", lang), True, TEXT_COLOR)
+            mode_lbl = input_font.render(t(trans, "world_mode", lang), True, TEXT_COLOR)
             screen.blit(label, (world_name_input.rect.x, world_name_input.rect.y - 26))
             world_name_input.draw(screen)
             confirm_btn.draw(screen)
             cancel_btn.draw(screen)
+            mode_lbl_rect = mode_lbl.get_rect(midleft=(world_name_input.rect.x,
+                                                       spec_mode_btn.rect.centery))
+            screen.blit(mode_lbl, mode_lbl_rect)
+            spec_mode_btn.draw(screen)
+            crea_mode_btn.draw(screen)
         else:
             create_btn.draw(screen)
             for _, enter_btn, edit_btn, delete_btn in row_controls:

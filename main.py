@@ -13,6 +13,7 @@ from world import World, GRASS, DIRT, STONE, COBBLESTONE, MOSSY_COBBLESTONE, BED
 from player import Player
 from homepage import homepage
 from logger import init_log, log_event, log_game_start, log_game_end, log_pause, log_resume
+from gamemodes import SPECTATOR, CREATIVE, MODE_LIST, create_mode
 
 # Constants
 INITIAL_WIDTH = 1024
@@ -31,10 +32,6 @@ FONT_PATH = "fonts/LXGWWenKai-Regular.ttf"
 BLOCK_CONFIG_PATH = "translate/block.json"
 TRANSLATE_CONFIG_PATH = "translate/translate.json"
 GUI_DIR = "image/gui"
-
-
-class GameMode:
-    SPECTATOR = "spectator"
 
 
 def load_json(path: str):
@@ -97,12 +94,13 @@ def load_gui_textures() -> dict:
     return gui
 
 
-def start_game(screen, screen_width, screen_height, username, lang, settings, world_name):
+def start_game(screen, screen_width, screen_height, username, lang, settings, world_name, mode_name=SPECTATOR):
     """
     Main game loop after successful login.
     Returns "homepage" to return to the main menu, or False to quit the app.
     """
     log_game_start(username, world_name)
+    log_event(f"Game Mode: user={username} mode={mode_name}")
 
     # Load configs
     block_config = load_json(BLOCK_CONFIG_PATH)
@@ -180,9 +178,8 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
     rmb_drag_start_mouse = (0, 0)
     rmb_drag_start_offset = (0.0, 0.0)
 
-    game_mode = GameMode.SPECTATOR
-    mode_list = [GameMode.SPECTATOR]
-    mode_index = 0
+    # Create the game mode instance
+    current_mode = create_mode(mode_name, player, world, textures, username)
 
     running = True
     result = False  # Return value: False = quit app, "homepage" = back to menu
@@ -259,6 +256,11 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
                     log_pause(username)
                 elif event.key == pygame.K_F3:
                     show_debug = not show_debug
+                elif event.key == pygame.K_F4 and (keys[pygame.K_F3] or event.mod & pygame.KMOD_CTRL):
+                    # F3+F4: switch between spectator and creative modes
+                    new_mode_name = CREATIVE if current_mode.name == SPECTATOR else SPECTATOR
+                    log_event(f"Mode Switch: user={username} from={current_mode.name} to={new_mode_name}")
+                    current_mode = create_mode(new_mode_name, player, world, textures, username)
                 elif event.key == pygame.K_F11:
                     is_fullscreen = not is_fullscreen
                     if is_fullscreen:
@@ -270,9 +272,6 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
                         screen = pygame.display.set_mode(
                             (screen_width, screen_height), pygame.RESIZABLE
                         )
-                elif event.key == pygame.K_TAB:
-                    mode_index = (mode_index + 1) % len(mode_list)
-                    game_mode = mode_list[mode_index]
                 elif event.key == pygame.K_l and (event.mod & pygame.KMOD_CTRL):
                     current_lang = "en" if current_lang == "zh" else "zh"
                     pygame.display.set_caption(
@@ -302,8 +301,8 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
                     if new_size >= MIN_BLOCK_SIZE:
                         block_size = max(int(new_size), MIN_BLOCK_SIZE)
 
-        # Right mouse drag
-        if not paused:
+        # Right mouse drag: only in spectator mode
+        if not paused and current_mode.name == SPECTATOR:
             if mouse_buttons[2]:
                 if not is_rmb_dragging:
                     is_rmb_dragging = True
@@ -318,9 +317,10 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
             else:
                 if is_rmb_dragging:
                     is_rmb_dragging = False
+        elif not paused:
+            # Reset drag state when not in spectator mode
+            is_rmb_dragging = False
 
-        if not paused:
-            player.update(keys, dt)
         px, py = player.get_pos()
         adjusted_cam_x = px + camera_offset_x
         if not paused:
@@ -334,6 +334,7 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
         hovered_wy = 0
         hovered_sx = 0
         hovered_sy = 0
+        hovered_info = None  # (wx, wy, block_type) for mode interaction
         cx_off = screen_width // 2
         cy_off = screen_height // 2
         world_mx = camera_x + (mx - cx_off) / block_size
@@ -348,6 +349,14 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
                 hovered_wy = wy
                 hovered_sx = int((wx - camera_x) * block_size + cx_off)
                 hovered_sy = int((camera_y - wy) * block_size + cy_off)
+                hovered_info = (wx, wy, bt)
+
+        # Update current game mode (player physics, particles, block breaking)
+        if not paused:
+            current_mode.update(dt, keys, mouse_buttons, mx, my, block_size, hovered_info)
+        px, py = player.get_pos()
+        camera_x = px + camera_offset_x
+        camera_y = py + camera_offset_y
 
         # RENDER
         screen.fill((135, 206, 235))
@@ -373,6 +382,12 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
             screen.blit(shadow_surf, (nx + 1, ny + 1))
             screen.blit(name_surf, (nx, ny))
 
+        # Render particles over blocks
+        current_mode.render_particles(screen, camera_x, camera_y, block_size)
+
+        # Render player entity (creative only)
+        current_mode.render_player(screen, camera_x, camera_y, block_size)
+
         # Custom cursor
         if not paused:
             cursor_key = "mouse_right_spectator" if is_rmb_dragging else "mouse"
@@ -380,10 +395,13 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
             if cursor_img:
                 screen.blit(cursor_img, (mx, my))
 
-        # Mode label
-        mode_name = mode_texts.get(current_lang, "Spectator")
-        mode_surf = mode_font.render(mode_name, True, (255, 255, 255))
-        mode_shadow = mode_font.render(mode_name, True, (0, 0, 0))
+        # Mode label (dynamic based on current mode)
+        if current_mode.name == CREATIVE:
+            mode_label_text = gui_section.get("mode_creative", {}).get(current_lang, "Creative")
+        else:
+            mode_label_text = mode_texts.get(current_lang, "Spectator")
+        mode_surf = mode_font.render(mode_label_text, True, (255, 255, 255))
+        mode_shadow = mode_font.render(mode_label_text, True, (0, 0, 0))
         mode_x = screen_width - mode_surf.get_width() - 10
         mode_y = screen_height - mode_surf.get_height() - 10
         screen.blit(mode_shadow, (mode_x + 1, mode_y + 1))
@@ -416,9 +434,15 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
             if hovered_block:
                 name = block_name(hovered_block)
                 hover_debug = tref("debug_hover", name=name)
+            # Controls hint depends on current mode
+            if current_mode.name == CREATIVE:
+                controls_line = gui_section.get("controls_hint", {}).get(
+                    current_lang, "")
+            else:
+                controls_line = controls_texts.get(current_lang, "")
             lines = [
                 tref("debug_fps", fps=clock.get_fps()),
-                tref("debug_mode", mode=mode_name),
+                tref("debug_mode", mode=mode_label_text),
                 tref("debug_world", name=world_name),
                 tref("debug_player", x=px, y=py),
                 tref("debug_camera", x=camera_x, y=camera_y),
@@ -429,7 +453,7 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
                 tref("debug_chunks", n=len(world.chunks)),
                 tref("debug_textures", n=len(textures)),
                 tref("debug_lang"),
-                controls_texts.get(current_lang, ""),
+                controls_line,
             ]
             for i, line in enumerate(lines):
                 text_surf = debug_font.render(line, True, (255, 255, 255))
@@ -510,11 +534,11 @@ def main():
         if world_result == "back":
             screen_width, screen_height = actual_width, actual_height
             continue
-        world_name, screen, actual_width, actual_height = world_result
+        world_name, mode_name, screen, actual_width, actual_height = world_result
 
         # Start the game with actual screen dimensions (fixes maximize/fullscreen scaling)
         game_result = start_game(screen, actual_width, actual_height,
-                                 username, lang, settings, world_name)
+                                 username, lang, settings, world_name, mode_name)
 
         if game_result != "homepage":
             # User quit the app from the pause menu

@@ -131,6 +131,13 @@ class Chunk:
         """Get block type at local (x, y), or None if air/void."""
         return self._blocks.get((x, y), None)
 
+    def remove_block(self, x: int, y: int) -> str:
+        """
+        Remove a block at local (x, y).
+        Returns the removed block type, or None if no block existed.
+        """
+        return self._blocks.pop((x, y), None)
+
     def get_surface_height(self, x: int) -> int:
         """Get surface height at column x."""
         return self._surface_heights.get(x, 0)
@@ -194,6 +201,17 @@ class World:
         if chunk is None:
             return None
         return chunk.get_block(x, y)
+
+    def break_block(self, x: int, y: int):
+        """
+        Break (remove) a block at world (x, y).
+        Returns the removed block type, or None if no block existed.
+        """
+        cx = self._get_chunk_x(x)
+        chunk = self.chunks.get(cx)
+        if chunk is None:
+            return None
+        return chunk.remove_block(x, y)
 
     def get_surface_height(self, x: int) -> int:
         """Get surface height at world column x."""

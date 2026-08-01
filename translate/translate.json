@@ -15,7 +15,11 @@
   "gui": {
     "window_title": { "zh": "My2DWorld - 无限地形探索", "en": "My2DWorld - Infinite Terrain" },
     "mode_spectator": { "zh": "旁观模式", "en": "Spectator Mode" },
-    "controls_hint": { "zh": "WASD:移动 | 滚轮:缩放 | 右键:平移 | Ctrl+L:切换语言 | F3:调试 | F11:全屏 | ESC:暂停", "en": "WASD:Move | Scroll:Zoom | RMB:Pan | Ctrl+L:Lang | F3:Debug | F11:FS | ESC:Pause" },
+    "mode_creative": { "zh": "创造模式", "en": "Creative Mode" },
+    "controls_hint": { "zh": "WASD:移动 | 空格:跳跃 | 长按空格:飞行 | 左键:破坏 | F3+F4:切换模式 | Ctrl+L:切换语言 | F3:调试 | F11:全屏 | ESC:暂停", "en": "WASD:Move | Space:Jump | Hold Space:Fly | LMB:Break | F3+F4:Switch Mode | Ctrl+L:Lang | F3:Debug | F11:FS | ESC:Pause" },
+    "world_mode": { "zh": "游戏模式", "en": "Game Mode" },
+    "world_mode_spectator": { "zh": "旁观模式", "en": "Spectator" },
+    "world_mode_creative": { "zh": "创造模式", "en": "Creative" },
     "debug_fps": { "zh": "FPS: {fps}", "en": "FPS: {fps}" },
     "debug_player": { "zh": "玩家: ({x:.1f}, {y:.1f})", "en": "Player: ({x:.1f}, {y:.1f})" },
     "debug_camera": { "zh": "相机: ({x:.1f}, {y:.1f})", "en": "Cam: ({x:.1f}, {y:.1f})" },

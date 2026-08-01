@@ -23,6 +23,7 @@ BUTTON_HOVER = (70, 70, 70, 220)
 INPUT_COLOR = (40, 40, 40, 200)
 TEXT_COLOR = (255, 255, 255)
 ACCENT_COLOR = (100, 200, 255)
+ACTIVE_COLOR = (60, 120, 180, 230)
 ERROR_COLOR = (255, 100, 100)
 SUCCESS_COLOR = (100, 255, 100)
 
@@ -131,6 +132,8 @@ class Button:
         self.text = text
         self.font = font
         self.hover = False
+        # Optional custom fill color (else uses BUTTON_COLOR/BUTTON_HOVER)
+        self.color: "tuple | None" = None
 
     def handle_event(self, event):
         if event.type == pygame.MOUSEMOTION:
@@ -144,7 +147,10 @@ class Button:
         self.text = text
 
     def draw(self, screen):
-        color = BUTTON_HOVER if self.hover else BUTTON_COLOR
+        if self.color is not None:
+            color = self.color
+        else:
+            color = BUTTON_HOVER if self.hover else BUTTON_COLOR
         pygame.draw.rect(screen, color, self.rect, border_radius=6)
         pygame.draw.rect(screen, ACCENT_COLOR, self.rect, 2, border_radius=6)
         text_surf = self.font.render(self.text, True, TEXT_COLOR)
