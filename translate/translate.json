@@ -77,5 +77,11 @@
     ,"world_delete": { "zh": "删除", "en": "Delete" }
     ,"world_edit_confirm": { "zh": "保存名称", "en": "Save Name" }
     ,"world_cancel": { "zh": "取消", "en": "Cancel" }
+    ,"world_physics": { "zh": "世界物理设置", "en": "World Physics" }
+    ,"world_physics_save": { "zh": "完成", "en": "Done" }
+    ,"world_walk_speed": { "zh": "行走速度", "en": "Walk Speed" }
+    ,"world_fly_speed": { "zh": "飞行速度", "en": "Fly Speed" }
+    ,"world_jump_velocity": { "zh": "跳跃速度", "en": "Jump Velocity" }
+    ,"world_gravity": { "zh": "重力", "en": "Gravity" }
   }
 }

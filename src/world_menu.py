@@ -87,6 +87,7 @@ def save_worlds(username, worlds):
 
 def world_menu(screen, screen_width, screen_height, username, lang):
     """Return a selected world tuple, ``"back"``, or ``None`` on quit."""
+    global physics_label_midright_x
     clock = pygame.time.Clock()
     if os.path.isfile(FONT_PATH):
         title_font = pygame.font.Font(FONT_PATH, 42)
@@ -102,6 +103,7 @@ def world_menu(screen, screen_width, screen_height, username, lang):
     scroll_index = 0
     editing_index = None
     creating_world = False
+    physics_open = False
     new_mode = "spectator"          # selected mode for world creation
     message = ""
     world_name_input = TextInput(0, 0, BUTTON_WIDTH, 40, input_font,
@@ -151,35 +153,51 @@ def world_menu(screen, screen_width, screen_height, username, lang):
                                 t(trans, "world_delete", lang), button_font)
             row_controls.append((world_index, enter_btn, edit_btn, delete_btn))
 
+        physics_btn = None
+        physics_save_btn = None
+        physics_back_btn = None
         if editing_index is not None:
             world_name_input.rect.topleft = (center_x - BUTTON_WIDTH // 2,
                                              content_y + 40)
-            confirm_btn = Button(center_x - BUTTON_WIDTH // 2, content_y + 342,
-                                 BUTTON_WIDTH, BUTTON_HEIGHT, "", button_font)
-            cancel_btn = Button(center_x - BUTTON_WIDTH // 2, content_y + 398,
-                                BUTTON_WIDTH, 40, "", button_font)
-            confirm_btn.set_text(t(trans, "world_edit_confirm", lang))
-            cancel_btn.set_text(t(trans, "world_cancel", lang))
+            if physics_open:
+                physics_save_btn = Button(center_x - BUTTON_WIDTH // 2,
+                                          screen_height - 112, BUTTON_WIDTH,
+                                          BUTTON_HEIGHT, "", button_font)
+                physics_back_btn = Button(center_x - BUTTON_WIDTH // 2,
+                                          screen_height - 62, BUTTON_WIDTH,
+                                          40, "", button_font)
+                physics_save_btn.set_text(t(trans, "world_physics_save", lang))
+                physics_back_btn.set_text(t(trans, "world_cancel", lang))
+                physics_row_y = content_y + 92
+                physics_label_midright_x = center_x - BUTTON_WIDTH // 2 + 58
+                physics_input_x = center_x - BUTTON_WIDTH // 2 + 78
+                for index, key in enumerate(PHYSICS_KEYS):
+                    physics_inputs[key].rect.topleft = (
+                        physics_input_x, physics_row_y + index * 52)
+                confirm_btn = cancel_btn = None
+                spec_mode_btn = crea_mode_btn = None
+            else:
+                confirm_btn = Button(center_x - BUTTON_WIDTH // 2, content_y + 210,
+                                     BUTTON_WIDTH, BUTTON_HEIGHT, "", button_font)
+                cancel_btn = Button(center_x - BUTTON_WIDTH // 2, content_y + 266,
+                                    BUTTON_WIDTH, 40, "", button_font)
+                physics_btn = Button(center_x - BUTTON_WIDTH // 2, content_y + 154,
+                                     BUTTON_WIDTH, 40, "", button_font)
+                confirm_btn.set_text(t(trans, "world_edit_confirm", lang))
+                cancel_btn.set_text(t(trans, "world_cancel", lang))
+                physics_btn.set_text(t(trans, "world_physics", lang))
 
-            # Mode selection: two toggle buttons side by side.
-            mode_half_width = (BUTTON_WIDTH - 10) // 2
-            mode_label_y = content_y + 92
-            spec_mode_btn = Button(center_x - BUTTON_WIDTH // 2, mode_label_y,
-                                   mode_half_width, 40, "", button_font)
-            crea_mode_btn = Button(spec_mode_btn.rect.right + 10, mode_label_y,
-                                   mode_half_width, 40, "", button_font)
-            spec_mode_btn.set_text(t(trans, "world_mode_spectator", lang))
-            crea_mode_btn.set_text(t(trans, "world_mode_creative", lang))
-            spec_mode_btn.color = ACTIVE_COLOR if new_mode == "spectator" else BUTTON_COLOR
-            crea_mode_btn.color = ACTIVE_COLOR if new_mode == "creative" else BUTTON_COLOR
-
-            # Physics parameter inputs (one row per parameter).
-            physics_row_y = content_y + 160
-            physics_label_midright_x = center_x - BUTTON_WIDTH // 2 - 12
-            physics_input_x = center_x - BUTTON_WIDTH // 2 + 10
-            for index, key in enumerate(PHYSICS_KEYS):
-                physics_inputs[key].rect.topleft = (
-                    physics_input_x, physics_row_y + index * 44)
+                # Mode selection: two toggle buttons side by side.
+                mode_half_width = (BUTTON_WIDTH - 10) // 2
+                mode_label_y = content_y + 92
+                spec_mode_btn = Button(center_x - BUTTON_WIDTH // 2, mode_label_y,
+                                       mode_half_width, 40, "", button_font)
+                crea_mode_btn = Button(spec_mode_btn.rect.right + 10, mode_label_y,
+                                       mode_half_width, 40, "", button_font)
+                spec_mode_btn.set_text(t(trans, "world_mode_spectator", lang))
+                crea_mode_btn.set_text(t(trans, "world_mode_creative", lang))
+                spec_mode_btn.color = ACTIVE_COLOR if new_mode == "spectator" else BUTTON_COLOR
+                crea_mode_btn.color = ACTIVE_COLOR if new_mode == "creative" else BUTTON_COLOR
         else:
             confirm_btn = cancel_btn = None
             spec_mode_btn = crea_mode_btn = None
@@ -193,6 +211,10 @@ def world_menu(screen, screen_width, screen_height, username, lang):
             assert spec_mode_btn is not None
             assert crea_mode_btn is not None
             buttons.extend((confirm_btn, cancel_btn, spec_mode_btn, crea_mode_btn))
+            if physics_btn is not None:
+                buttons.append(physics_btn)
+        if physics_save_btn is not None:
+            buttons.extend((physics_save_btn, physics_back_btn))
         for button in buttons:
             button.hover = button.rect.collidepoint(mouse_pos)
 
@@ -212,14 +234,23 @@ def world_menu(screen, screen_width, screen_height, username, lang):
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     if editing_index is not None:
-                        if creating_world:
-                            worlds.pop(editing_index)
-                        editing_index = None
-                        creating_world = False
-                        world_name_input.active = False
-                        message = ""
+                        if physics_open:
+                            physics_open = False
+                            message = ""
+                        else:
+                            if creating_world:
+                                worlds.pop(editing_index)
+                            editing_index = None
+                            creating_world = False
+                            world_name_input.active = False
+                            message = ""
                     else:
                         return "back"
+                elif editing_index is not None and physics_open:
+                    for key in PHYSICS_KEYS:
+                        inp = physics_inputs[key]
+                        inp.handle_event(event)
+                        inp.text = _filter_number(inp.text)[:8]
                 elif editing_index is not None and event.key == pygame.K_RETURN:
                     world_name_input.handle_event(event)
                     world_name_input.text = world_name_input.text[:MAX_WORLD_NAME_LENGTH]
@@ -254,6 +285,19 @@ def world_menu(screen, screen_width, screen_height, username, lang):
 
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if editing_index is not None:
+                    if physics_open:
+                        assert physics_save_btn is not None
+                        assert physics_back_btn is not None
+                        for key in PHYSICS_KEYS:
+                            inp = physics_inputs[key]
+                            inp.handle_event(event)
+                            inp.text = _filter_number(inp.text)[:8]
+                        if physics_save_btn.handle_event(event):
+                            physics_open = False
+                            message = ""
+                        elif physics_back_btn.handle_event(event):
+                            physics_open = False
+                        continue
                     assert confirm_btn is not None
                     assert cancel_btn is not None
                     assert spec_mode_btn is not None
@@ -269,6 +313,9 @@ def world_menu(screen, screen_width, screen_height, username, lang):
                         message = ""
                     elif crea_mode_btn and crea_mode_btn.handle_event(event):
                         new_mode = "creative"
+                        message = ""
+                    elif physics_btn and physics_btn.handle_event(event):
+                        physics_open = True
                         message = ""
                     elif confirm_btn.handle_event(event):
                         new_name = world_name_input.text.strip()
@@ -312,6 +359,7 @@ def world_menu(screen, screen_width, screen_height, username, lang):
                     for key in PHYSICS_KEYS:
                         physics_inputs[key].text = str(PHYSICS_DEFAULTS[key])
                         physics_inputs[key].cursor_index = len(physics_inputs[key].text)
+                    physics_open = False
                     message = ""
                 elif back_btn.handle_event(event):
                     return "back"
@@ -325,6 +373,7 @@ def world_menu(screen, screen_width, screen_height, username, lang):
                         if edit_btn.handle_event(event):
                             editing_index = world_index
                             creating_world = False
+                            physics_open = False
                             new_mode = worlds[world_index].get("mode", "spectator")
                             world_name_input.text = worlds[world_index]["name"]
                             world_name_input.cursor_index = len(world_name_input.text)
@@ -356,10 +405,42 @@ def world_menu(screen, screen_width, screen_height, username, lang):
         overlay = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
         overlay.fill(BG_COLOR)
         screen.blit(overlay, (0, 0))
-        title_surf = title_font.render(t(trans, "world_menu_title", lang), True, ACCENT_COLOR)
-        screen.blit(title_surf, title_surf.get_rect(center=(center_x, title_y)))
+        if not physics_open:
+            title_surf = title_font.render(t(trans, "world_menu_title", lang), True,
+                                           ACCENT_COLOR)
+            screen.blit(title_surf, title_surf.get_rect(center=(center_x, title_y)))
 
-        if confirm_btn is not None:
+        if physics_open:
+            # A click can open this page after this frame's controls were built.
+            # Rebuild the physics-page controls here so the first frame renders safely.
+            if physics_save_btn is None:
+                physics_save_btn = Button(center_x - BUTTON_WIDTH // 2,
+                                          screen_height - 112, BUTTON_WIDTH,
+                                          BUTTON_HEIGHT, "", button_font)
+                physics_back_btn = Button(center_x - BUTTON_WIDTH // 2,
+                                          screen_height - 62, BUTTON_WIDTH,
+                                          40, "", button_font)
+                physics_save_btn.set_text(t(trans, "world_physics_save", lang))
+                physics_back_btn.set_text(t(trans, "world_cancel", lang))
+                physics_input_x = center_x - BUTTON_WIDTH // 2 + 78
+                for index, key in enumerate(PHYSICS_KEYS):
+                    physics_inputs[key].rect.topleft = (
+                        physics_input_x, content_y + 92 + index * 52)
+            phys_title = input_font.render(t(trans, "world_physics", lang),
+                                           True, TEXT_COLOR)
+            screen.blit(phys_title, phys_title.get_rect(center=(center_x, title_y)))
+            physics_label_midright_x = center_x - BUTTON_WIDTH // 2 + 58
+            for key in PHYSICS_KEYS:
+                inp = physics_inputs[key]
+                lbl_text = t(trans, f"world_{key}", lang)
+                lbl = input_font.render(lbl_text, True, TEXT_COLOR)
+                lbl_rect = lbl.get_rect(midright=(physics_label_midright_x,
+                                                  inp.rect.centery))
+                screen.blit(lbl, lbl_rect)
+                inp.draw(screen)
+            physics_save_btn.draw(screen)
+            physics_back_btn.draw(screen)
+        elif confirm_btn is not None:
             assert cancel_btn is not None
             assert spec_mode_btn is not None
             assert crea_mode_btn is not None
@@ -375,18 +456,7 @@ def world_menu(screen, screen_width, screen_height, username, lang):
             spec_mode_btn.draw(screen)
             crea_mode_btn.draw(screen)
 
-            # Physics parameter inputs (title + one labeled row per parameter).
-            phys_title = input_font.render(t(trans, "world_physics", lang),
-                                           True, TEXT_COLOR)
-            screen.blit(phys_title, (world_name_input.rect.x, content_y + 146))
-            for key in PHYSICS_KEYS:
-                inp = physics_inputs[key]
-                lbl_text = t(trans, f"world_{key}", lang)
-                lbl = input_font.render(lbl_text, True, TEXT_COLOR)
-                lbl_rect = lbl.get_rect(midright=(physics_label_midright_x,
-                                                  inp.rect.centery))
-                screen.blit(lbl, lbl_rect)
-                inp.draw(screen)
+            physics_btn.draw(screen)
         else:
             create_btn.draw(screen)
             for _, enter_btn, edit_btn, delete_btn in row_controls:
