@@ -163,6 +163,8 @@ class World:
         self.last_center_chunk = None
         # Record of broken blocks: set of (x, y) coordinates.
         self.broken_blocks: set[tuple[int, int]] = set()
+        # Player-placed blocks, keyed by world coordinate.
+        self.placed_blocks: dict[tuple[int, int], str] = {}
 
     def _get_chunk_x(self, world_x: float) -> int:
         """Get the chunk index for a world x coordinate."""
@@ -203,6 +205,9 @@ class World:
 
     def get_block(self, x: int, y: int):
         """Get block type at any world coordinate."""
+        placed = self.placed_blocks.get((x, y))
+        if placed:
+            return placed
         cx = self._get_chunk_x(x)
         chunk = self.chunks.get(cx)
         if chunk is None:
@@ -218,10 +223,35 @@ class World:
         chunk = self.chunks.get(cx)
         if chunk is None:
             return None
-        removed = chunk.remove_block(x, y)
+        placed = self.placed_blocks.pop((x, y), None)
+        removed = placed or chunk.remove_block(x, y)
         if removed:
             self.broken_blocks.add((x, y))
         return removed
+
+    def place_block(self, x: int, y: int, block_type: str) -> bool:
+        """Place a block in an existing loaded chunk if the cell is empty."""
+        if not block_type or y < 1 or self.get_block(x, y) is not None:
+            return False
+        cx = self._get_chunk_x(x)
+        chunk = self.chunks.get(cx)
+        if chunk is None:
+            return False
+        self.placed_blocks[(x, y)] = block_type
+        self.broken_blocks.discard((x, y))
+        return True
+
+    def apply_placed_blocks(self, placed_list):
+        """Restore saved player-placed blocks after chunks have loaded."""
+        if not isinstance(placed_list, list):
+            return
+        for item in placed_list:
+            try:
+                bx, by, block_type = int(item[0]), int(item[1]), str(item[2])
+            except (TypeError, ValueError, IndexError):
+                continue
+            if block_type and self.get_block(bx, by) is None:
+                self.placed_blocks[(bx, by)] = block_type
 
     def apply_broken_blocks(self, broken_list):
         """
@@ -307,3 +337,15 @@ class World:
                         if (-block_size <= sx <= screen_width and
                                 -block_size <= sy_px <= screen_height):
                             draw_func(sx, sy_px, bt)
+
+        # Placed blocks are stored separately from generated chunk data.
+        for (wx, wy), bt in list(self.placed_blocks.items()):
+            if bt is None:
+                continue
+            if wx < wx_start or wx >= wx_end or wy < wy_bottom or wy > wy_top:
+                continue
+            sx = int((wx - camera_x) * block_size + cx_off)
+            sy_px = int((camera_y - wy) * block_size + cy_off)
+            if (-block_size <= sx <= screen_width and
+                    -block_size <= sy_px <= screen_height):
+                draw_func(sx, sy_px, bt)
