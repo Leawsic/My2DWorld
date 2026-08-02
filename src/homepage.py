@@ -10,11 +10,12 @@ import pygame
 
 from account import register, login, init_default_account, hash_password
 from logger import log_event, log_login
+from runtime import PROJECT_ROOT
 
 # Paths
-HOME_BG_DIR = "image/Homepage_background"
-TRANSLATE_PATH = "translate/translate.json"
-FONT_PATH = "fonts/LXGWWenKai-Regular.ttf"
+HOME_BG_DIR = os.path.join(PROJECT_ROOT, "image", "Homepage_background")
+TRANSLATE_PATH = os.path.join(PROJECT_ROOT, "translate", "translate.json")
+FONT_PATH = os.path.join(PROJECT_ROOT, "fonts", "LXGWWenKai-Regular.ttf")
 
 # Colors
 BG_COLOR = (30, 30, 30, 180)

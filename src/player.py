@@ -13,6 +13,8 @@ import os
 
 import pygame
 
+from runtime import PROJECT_ROOT
+
 # ---------------------------------------------------------------------------
 # Player configuration
 # ---------------------------------------------------------------------------
@@ -21,17 +23,17 @@ FLY_SPEED = 3.5             # flying speed (blocks/sec)
 JUMP_VELOCITY = 9.5         # initial upward velocity for a jump (blocks/sec)
 MAX_JUMPS = 2               # double jump support
 GRAVITY = 14.0              # downward acceleration (blocks/sec²)
-FLY_HOLD_TIME = 3.0         # seconds of holding space to toggle flying
+DOUBLE_SPACE_WINDOW = 0.35  # seconds allowed between two space presses
 
-# Collision box (relative to player center)
-# Width: 0.5 blocks, Height: 1.9 blocks, centered exactly on the sprite center.
+# Collision box (relative to the player's feet).
+# Width: 0.5 blocks, height: 1.9 blocks. ``y`` is the foot coordinate.
 BODY_HALF_WIDTH = 0.25      # half the width (0.5 total)
-BODY_HALF_HEIGHT = 0.95     # half the height (1.9 total)
 BODY_HEIGHT = 1.9           # total height in blocks
-BODY_FOOT_OFFSET = 0.95     # distance from center to feet (half height)
+BODY_HALF_HEIGHT = BODY_HEIGHT / 2
+BODY_FOOT_OFFSET = BODY_HALF_HEIGHT  # compatibility for old callers
 
 # Player textures
-PLAYER_TEXTURE_DIR = "image/player"
+PLAYER_TEXTURE_DIR = os.path.join(PROJECT_ROOT, "image", "player")
 STEVE_STAND_PATH = os.path.join(PLAYER_TEXTURE_DIR, "steve/stand/1.png")
 STEVE_MOVE_DIR = os.path.join(PLAYER_TEXTURE_DIR, "steve/move")
 
@@ -64,11 +66,11 @@ def load_player_textures():
 
 class Player:
     """
-    Player with physics state. Position (x, y) is the *center* of the player.
+    Player with physics state. Position (x, y) is the player's feet.
     World Y increases upward.
     """
 
-    def __init__(self, start_x: float = 0, start_y: float = 50):
+    def __init__(self, start_x: float = 0, start_y: float = 50, settings=None):
         self.x = float(start_x)
         self.y = float(start_y)
 
@@ -78,9 +80,17 @@ class Player:
         self.on_ground = False
         self.jumps_used = 0
         self.flying = False
-        self.fly_hold_timer = 0.0      # seconds holding space to trigger fly toggle
-        self.fly_toggled = False       # prevents re-toggling while still holding
+        self.double_space_timer = 0.0  # remaining time for the second press
         self.space_was_down = False    # for jump edge detection
+        self.settings = settings or {}
+        movement = self.settings.get("movement", {})
+        self.walk_speed = float(movement.get("walk_speed", WALK_SPEED))
+        self.fly_speed = float(movement.get("fly_speed", FLY_SPEED))
+        self.jump_velocity = float(movement.get("jump_velocity", JUMP_VELOCITY))
+        self.gravity = float(movement.get("gravity", GRAVITY))
+        void_settings = self.settings.get("void", {})
+        self.max_health = float(void_settings.get("max_health", 20.0))
+        self.health = self.max_health
 
         # Animation state
         self.textures = load_player_textures()
@@ -100,24 +110,24 @@ class Player:
         """
         dt_sec = dt / 60.0  # real seconds
 
-        self._handle_fly_toggle(keys, dt_sec)
+        fly_toggled = self._handle_fly_toggle(keys, dt_sec)
 
         # Horizontal input
         self.velocity_x = 0.0
         moving_horizontal = False
-        if keys[pygame.K_a] or keys[pygame.K_LEFT]:
-            self.velocity_x = -WALK_SPEED
+        if self._key_down(keys, "left"):
+            self.velocity_x = -self.walk_speed
             self.facing = -1
             moving_horizontal = True
-        if keys[pygame.K_d] or keys[pygame.K_RIGHT]:
-            self.velocity_x = WALK_SPEED
+        if self._key_down(keys, "right"):
+            self.velocity_x = self.walk_speed
             self.facing = 1
             moving_horizontal = True
 
         if self.flying:
             self._update_flying(keys)
         else:
-            self._update_grounded(keys)
+            self._update_grounded(keys, allow_jump=not fly_toggled)
 
         # Apply movement with collision in X and Y separately (using real seconds)
         self._move_and_collide_x(world, dt_sec)
@@ -127,16 +137,29 @@ class Player:
         self._update_animation(dt_sec)
 
     def get_pos(self):
-        """Get (x, y) center position."""
+        """Get (x, y) foot position."""
         return self.x, self.y
+
+    def _key_down(self, keys, action):
+        name = self.settings.get("key_bindings", {}).get(action)
+        aliases = {"space": pygame.K_SPACE, "left": pygame.K_LEFT,
+                   "right": pygame.K_RIGHT, "up": pygame.K_UP,
+                   "down": pygame.K_DOWN}
+        key = aliases.get(name)
+        if key is None and name:
+            key_name = str(name)
+            key = getattr(pygame, f"K_{key_name.lower()}", None)
+            if key is None:
+                key = getattr(pygame, f"K_{key_name.upper()}", None)
+        return bool(key is not None and keys[key])
 
     def get_collision_rect(self):
         """
         Return world-space collision rectangle as (left, bottom, width, height).
-        Box is centered exactly on the sprite center: 0.5 wide and 1.9 tall.
+        The bottom of the box is exactly at ``self.y``.
         """
         left = self.x - BODY_HALF_WIDTH
-        bottom = self.y - BODY_HALF_HEIGHT
+        bottom = self.y
         return left, bottom, BODY_HALF_WIDTH * 2, BODY_HEIGHT
 
     def reset(self, start_x=0, start_y=50):
@@ -148,9 +171,9 @@ class Player:
         self.on_ground = False
         self.jumps_used = 0
         self.flying = False
-        self.fly_hold_timer = 0.0
-        self.fly_toggled = False
+        self.double_space_timer = 0.0
         self.space_was_down = False
+        self.health = self.max_health
         self.anim_state = "stand"
         self.anim_frame = 0
         self.anim_timer = 0.0
@@ -167,12 +190,11 @@ class Player:
         return frames[idx]
 
     def render(self, screen, camera_x, camera_y, block_size):
-        """Draw the player centered at world (x, y)."""
+        """Draw the player with its bottom aligned to its foot position."""
         frame = self.get_current_frame()
         if frame is None:
             return
-        # Textures are 64x64. Scale to 1.9 blocks tall keeping aspect ratio,
-        # and center on the player position (= collision box center).
+        # Scale to the collision-box height and align the image bottom with feet.
         target_h = block_size * BODY_HEIGHT
         fw, fh = frame.get_size()
         if fw <= 0 or fh <= 0:
@@ -189,52 +211,52 @@ class Player:
         cx_off = screen.get_width() // 2
         cy_off = screen.get_height() // 2
         sx = int((self.x - camera_x) * block_size + cx_off)
-        sy = int((camera_y - self.y) * block_size + cy_off)
+        foot_sy = int((camera_y - self.y) * block_size + cy_off)
 
-        # Player center maps to sprite center; align bottom to collision feet.
-        screen.blit(img, (sx - scaled_w // 2, sy - scaled_h // 2))
+        screen.blit(img, (sx - scaled_w // 2, foot_sy - scaled_h))
 
     # ------------------------------------------------------------------
     # Physics helpers
     # ------------------------------------------------------------------
     def _handle_fly_toggle(self, keys, dt_sec):
-        """Hold space for FLY_HOLD_TIME seconds to toggle flying."""
-        space_down = keys[pygame.K_SPACE]
-        if space_down:
-            self.fly_hold_timer += dt_sec
-            if self.fly_hold_timer >= FLY_HOLD_TIME and not self.fly_toggled:
+        """Toggle flying when space is pressed twice within a short window."""
+        self.double_space_timer = max(0.0, self.double_space_timer - dt_sec)
+        space_down = self._key_down(keys, "jump")
+        pressed = space_down and not self.space_was_down
+        toggled = False
+        if pressed:
+            if self.double_space_timer > 0.0:
                 self.flying = not self.flying
-                self.fly_toggled = True
+                toggled = True
                 self.velocity_y = 0.0
                 self.jumps_used = 0
-        else:
-            self.fly_hold_timer = 0.0
-            self.fly_toggled = False
+            self.double_space_timer = DOUBLE_SPACE_WINDOW
+        return toggled
 
     def _update_flying(self, keys):
         """Flying movement: no gravity, free WASD, faster speed."""
         # Horizontal velocity already set in update(); only set vertical here.
-        if keys[pygame.K_w] or keys[pygame.K_UP]:
-            self.velocity_y = FLY_SPEED
-        elif keys[pygame.K_s] or keys[pygame.K_DOWN]:
-            self.velocity_y = -FLY_SPEED
+        if self._key_down(keys, "up"):
+            self.velocity_y = self.fly_speed
+        elif self._key_down(keys, "down"):
+            self.velocity_y = -self.fly_speed
         else:
             self.velocity_y = 0.0
         # Track space edge state so returning to ground does not auto-jump.
-        self.space_was_down = keys[pygame.K_SPACE]
+        self.space_was_down = self._key_down(keys, "jump")
 
-    def _update_grounded(self, keys):
+    def _update_grounded(self, keys, allow_jump=True):
         """Gravity + jump handling (non-flying)."""
         # Jump on space press edge (not simple hold).
-        space_down = keys[pygame.K_SPACE]
-        if space_down and not self.space_was_down and self.fly_hold_timer < 0.05:
+        space_down = self._key_down(keys, "jump")
+        if allow_jump and space_down and not self.space_was_down:
             self._try_jump()
         self.space_was_down = space_down
 
     def _try_jump(self):
         """Attempt a jump if jumps remain (ground jump + air jump = double jump)."""
         if self.jumps_used < MAX_JUMPS:
-            self.velocity_y = JUMP_VELOCITY
+            self.velocity_y = self.jump_velocity
             self.jumps_used += 1
             self.on_ground = False
 
@@ -245,9 +267,10 @@ class Player:
 
         left, bottom, width, height = self.get_collision_rect()
         top = bottom + height
-        # All rows the collision box may touch (inclusive)
-        y_start = int(math.floor(bottom))
-        y_end = int(math.floor(top))
+        # World block ``y`` is its top edge, so block y occupies [y - 1, y].
+        # Convert the player's continuous vertical span to those block indices.
+        y_start = int(math.floor(bottom)) + 1
+        y_end = int(math.ceil(top))
 
         if dx > 0:  # moving right
             # Right edge entered a block at column floor(left + width)
@@ -282,24 +305,24 @@ class Player:
             if x_end < x_start:
                 x_end = x_start
             if dy > 0:  # moving up
-                fy = int(math.floor(top))
+                fy = int(math.ceil(top))
                 for wx in range(x_start, x_end + 1):
                     if world.get_block(wx, fy):
                         # Place player top just below the ceiling block
-                        self.y = fy - 0.001 - (height - BODY_FOOT_OFFSET)
+                        self.y = fy - 0.001 - height
                         self.velocity_y = 0.0
                         break
             elif dy < 0:  # moving down
-                fy = int(math.floor(bottom))
+                fy = int(math.ceil(bottom))
                 for wx in range(x_start, x_end + 1):
                     if world.get_block(wx, fy):
-                        self.y = fy + 1 + BODY_FOOT_OFFSET
+                        self.y = fy + 0.001
                         self.velocity_y = 0.0
                         break
             return
 
         # Apply gravity (velocity decreases over real time)
-        self.velocity_y -= GRAVITY * dt_sec
+        self.velocity_y -= self.gravity * dt_sec
 
         dy = self.velocity_y * dt_sec
         self.y += dy
@@ -311,13 +334,13 @@ class Player:
             x_end = x_start
 
         if dy < 0:  # moving down (falling)
-            # The feet have entered block at row floor(bottom) if that block exists.
-            fy = int(math.floor(bottom))
+            # Block y occupies [y - 1, y], so feet enter row ceil(bottom).
+            fy = int(math.ceil(bottom))
             landed = False
             for wx in range(x_start, x_end + 1):
                 if world.get_block(wx, fy):
-                    # Standing on top of block fy: feet at fy + 1
-                    self.y = (fy + 1) + BODY_FOOT_OFFSET + 0.001
+                    # Standing on top of block fy: feet at fy.
+                    self.y = fy + 0.001
                     self.velocity_y = 0.0
                     self.on_ground = True
                     self.jumps_used = 0
@@ -326,12 +349,12 @@ class Player:
             if not landed:
                 self.on_ground = False
         else:  # moving up
-            # Head has entered block at row floor(top) if that block exists.
-            fy = int(math.floor(top))
+            # The head enters a block whose top-edge coordinate is ceil(top).
+            fy = int(math.ceil(top))
             for wx in range(x_start, x_end + 1):
                 if world.get_block(wx, fy):
                     # Head just below block fy: top at fy - 0.001
-                    self.y = fy - 0.001 - (height - BODY_FOOT_OFFSET)
+                    self.y = fy - 0.001 - height
                     self.velocity_y = 0.0
                     break
 
