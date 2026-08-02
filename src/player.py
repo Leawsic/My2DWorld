@@ -13,6 +13,8 @@ import os
 
 import pygame
 
+from runtime import PROJECT_ROOT
+
 # ---------------------------------------------------------------------------
 # Player configuration
 # ---------------------------------------------------------------------------
@@ -23,15 +25,15 @@ MAX_JUMPS = 2               # double jump support
 GRAVITY = 14.0              # downward acceleration (blocks/sec²)
 FLY_HOLD_TIME = 3.0         # seconds of holding space to toggle flying
 
-# Collision box (relative to player center)
-# Width: 0.5 blocks, Height: 1.9 blocks, centered exactly on the sprite center.
+# Collision box (relative to the player's feet).
+# Width: 0.5 blocks, height: 1.9 blocks. ``y`` is the foot coordinate.
 BODY_HALF_WIDTH = 0.25      # half the width (0.5 total)
-BODY_HALF_HEIGHT = 0.95     # half the height (1.9 total)
 BODY_HEIGHT = 1.9           # total height in blocks
-BODY_FOOT_OFFSET = 0.95     # distance from center to feet (half height)
+BODY_HALF_HEIGHT = BODY_HEIGHT / 2
+BODY_FOOT_OFFSET = BODY_HALF_HEIGHT  # compatibility for old callers
 
 # Player textures
-PLAYER_TEXTURE_DIR = "image/player"
+PLAYER_TEXTURE_DIR = os.path.join(PROJECT_ROOT, "image", "player")
 STEVE_STAND_PATH = os.path.join(PLAYER_TEXTURE_DIR, "steve/stand/1.png")
 STEVE_MOVE_DIR = os.path.join(PLAYER_TEXTURE_DIR, "steve/move")
 
@@ -64,7 +66,7 @@ def load_player_textures():
 
 class Player:
     """
-    Player with physics state. Position (x, y) is the *center* of the player.
+    Player with physics state. Position (x, y) is the player's feet.
     World Y increases upward.
     """
 
@@ -127,16 +129,16 @@ class Player:
         self._update_animation(dt_sec)
 
     def get_pos(self):
-        """Get (x, y) center position."""
+        """Get (x, y) foot position."""
         return self.x, self.y
 
     def get_collision_rect(self):
         """
         Return world-space collision rectangle as (left, bottom, width, height).
-        Box is centered exactly on the sprite center: 0.5 wide and 1.9 tall.
+        The bottom of the box is exactly at ``self.y``.
         """
         left = self.x - BODY_HALF_WIDTH
-        bottom = self.y - BODY_HALF_HEIGHT
+        bottom = self.y
         return left, bottom, BODY_HALF_WIDTH * 2, BODY_HEIGHT
 
     def reset(self, start_x=0, start_y=50):
@@ -167,12 +169,11 @@ class Player:
         return frames[idx]
 
     def render(self, screen, camera_x, camera_y, block_size):
-        """Draw the player centered at world (x, y)."""
+        """Draw the player with its bottom aligned to its foot position."""
         frame = self.get_current_frame()
         if frame is None:
             return
-        # Textures are 64x64. Scale to 1.9 blocks tall keeping aspect ratio,
-        # and center on the player position (= collision box center).
+        # Scale to the collision-box height and align the image bottom with feet.
         target_h = block_size * BODY_HEIGHT
         fw, fh = frame.get_size()
         if fw <= 0 or fh <= 0:
@@ -189,10 +190,9 @@ class Player:
         cx_off = screen.get_width() // 2
         cy_off = screen.get_height() // 2
         sx = int((self.x - camera_x) * block_size + cx_off)
-        sy = int((camera_y - self.y) * block_size + cy_off)
+        foot_sy = int((camera_y - self.y) * block_size + cy_off)
 
-        # Player center maps to sprite center; align bottom to collision feet.
-        screen.blit(img, (sx - scaled_w // 2, sy - scaled_h // 2))
+        screen.blit(img, (sx - scaled_w // 2, foot_sy - scaled_h))
 
     # ------------------------------------------------------------------
     # Physics helpers
@@ -286,14 +286,14 @@ class Player:
                 for wx in range(x_start, x_end + 1):
                     if world.get_block(wx, fy):
                         # Place player top just below the ceiling block
-                        self.y = fy - 0.001 - (height - BODY_FOOT_OFFSET)
+                        self.y = fy - 0.001 - height
                         self.velocity_y = 0.0
                         break
             elif dy < 0:  # moving down
                 fy = int(math.floor(bottom))
                 for wx in range(x_start, x_end + 1):
                     if world.get_block(wx, fy):
-                        self.y = fy + 1 + BODY_FOOT_OFFSET
+                        self.y = fy + 1 + 0.001
                         self.velocity_y = 0.0
                         break
             return
@@ -317,7 +317,7 @@ class Player:
             for wx in range(x_start, x_end + 1):
                 if world.get_block(wx, fy):
                     # Standing on top of block fy: feet at fy + 1
-                    self.y = (fy + 1) + BODY_FOOT_OFFSET + 0.001
+                    self.y = (fy + 1) + 0.001
                     self.velocity_y = 0.0
                     self.on_ground = True
                     self.jumps_used = 0
@@ -331,7 +331,7 @@ class Player:
             for wx in range(x_start, x_end + 1):
                 if world.get_block(wx, fy):
                     # Head just below block fy: top at fy - 0.001
-                    self.y = fy - 0.001 - (height - BODY_FOOT_OFFSET)
+                    self.y = fy - 0.001 - height
                     self.velocity_y = 0.0
                     break
 

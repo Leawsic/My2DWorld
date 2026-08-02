@@ -10,11 +10,11 @@ import sys
 import pygame
 
 from world import World, GRASS, DIRT, STONE, COBBLESTONE, MOSSY_COBBLESTONE, BEDROCK
-from player import Player
+from player import BODY_HALF_HEIGHT, Player
 from homepage import homepage
 from logger import init_log, log_event, log_game_start, log_game_end, log_pause, log_resume
 from gamemodes import SPECTATOR, CREATIVE, MODE_LIST, create_mode
-from runtime import WORLDS_DIR, ensure_runtime_data
+from runtime import PROJECT_ROOT, WORLDS_DIR, ensure_runtime_data
 
 # Constants
 INITIAL_WIDTH = 1024
@@ -28,11 +28,11 @@ ZOOM_FACTOR = 1.15
 HIGHLIGHT_COLOR = (255, 255, 255)
 HIGHLIGHT_WIDTH = 2
 
-# New file paths
-FONT_PATH = "fonts/LXGWWenKai-Regular.ttf"
-BLOCK_CONFIG_PATH = "translate/block.json"
-TRANSLATE_CONFIG_PATH = "translate/translate.json"
-GUI_DIR = "image/gui"
+# Project resource paths
+FONT_PATH = os.path.join(PROJECT_ROOT, "fonts", "LXGWWenKai-Regular.ttf")
+BLOCK_CONFIG_PATH = os.path.join(PROJECT_ROOT, "translate", "block.json")
+TRANSLATE_CONFIG_PATH = os.path.join(PROJECT_ROOT, "translate", "translate.json")
+GUI_DIR = os.path.join(PROJECT_ROOT, "image", "gui")
 
 
 def load_json(path: str):
@@ -47,7 +47,9 @@ def load_json(path: str):
         return {}
 
 
-def load_textures(tex_dir: str = "image/block") -> dict:
+def load_textures(tex_dir: str | None = None) -> dict:
+    if tex_dir is None:
+        tex_dir = os.path.join(PROJECT_ROOT, "image", "block")
     textures = {}
     if not os.path.isdir(tex_dir):
         log_event(f"Warning: texture directory '{tex_dir}' not found")
@@ -104,7 +106,7 @@ def load_world_save(username: str, world_name: str):
 
 def save_world_state(username: str, world_name: str, player, world):
     """
-    Save player position (center) and broken block coordinates to disk.
+    Save player foot position and broken block coordinates to disk.
     """
     ensure_runtime_data()
     os.makedirs(WORLDS_DIR, exist_ok=True)
@@ -112,6 +114,7 @@ def save_world_state(username: str, world_name: str, player, world):
     data = {
         "player_x": px,
         "player_y": py,
+        "position_anchor": "feet",
         "broken_blocks": [[bx, by] for bx, by in sorted(world.broken_blocks)],
     }
     path = world_save_path(username, world_name)
@@ -218,6 +221,9 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
         try:
             start_px = float(save_data.get("player_x", 0))
             start_py = float(save_data.get("player_y", 0))
+            # Older saves stored the player center instead of the foot anchor.
+            if save_data.get("position_anchor") != "feet":
+                start_py -= BODY_HALF_HEIGHT
         except (TypeError, ValueError):
             start_px, start_py = 0, 0
         broken = save_data.get("broken_blocks", [])
@@ -225,7 +231,7 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
         log_event(f"World Loaded: user={username} world={world_name} "
                   f"pos=({start_px:.1f},{start_py:.1f}) blocks={len(world.broken_blocks)}")
     else:
-        start_px, start_py = 0, world.get_surface_height(0) + 3
+        start_px, start_py = 0, world.get_surface_height(0) + 1.001
 
     player = Player(start_x=start_px, start_y=start_py)
     world.update_view(player.x)

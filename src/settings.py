@@ -11,10 +11,10 @@ import pygame
 
 from homepage import Button, HOME_BG_DIR, load_translations, t
 from logger import log_event
-from runtime import CONFIG_DIR, ensure_runtime_data
+from runtime import CONFIG_DIR, PROJECT_ROOT, ensure_runtime_data
 
 SETTINGS_PATH = os.path.join(CONFIG_DIR, "basic.json")
-FONT_PATH = "fonts/LXGWWenKai-Regular.ttf"
+FONT_PATH = os.path.join(PROJECT_ROOT, "fonts", "LXGWWenKai-Regular.ttf")
 
 DEFAULT_SETTINGS = {
     "fullscreen": False,

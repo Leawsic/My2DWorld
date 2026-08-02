@@ -3,7 +3,8 @@
 import os
 import shutil
 
-RUN_DIR = "run"
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+RUN_DIR = os.path.join(PROJECT_ROOT, "run")
 ACCOUNTS_DIR = os.path.join(RUN_DIR, "accounts")
 CONFIG_DIR = os.path.join(RUN_DIR, "config")
 LOGS_DIR = os.path.join(RUN_DIR, "logs")
@@ -31,10 +32,11 @@ def ensure_runtime_data():
     if _migrated:
         return
 
-    _copy_legacy_directory("Account_and_password", ACCOUNTS_DIR)
-    _copy_legacy_directory("logs", LOGS_DIR)
-    _copy_legacy_directory("worlds", WORLDS_DIR)
-    _copy_legacy_file("config/basic.json", os.path.join(CONFIG_DIR, "basic.json"))
+    _copy_legacy_directory(os.path.join(PROJECT_ROOT, "Account_and_password"), ACCOUNTS_DIR)
+    _copy_legacy_directory(os.path.join(PROJECT_ROOT, "logs"), LOGS_DIR)
+    _copy_legacy_directory(os.path.join(PROJECT_ROOT, "worlds"), WORLDS_DIR)
+    _copy_legacy_file(os.path.join(PROJECT_ROOT, "config", "basic.json"),
+                      os.path.join(CONFIG_DIR, "basic.json"))
 
     for directory in (ACCOUNTS_DIR, CONFIG_DIR, LOGS_DIR, WORLDS_DIR):
         os.makedirs(directory, exist_ok=True)

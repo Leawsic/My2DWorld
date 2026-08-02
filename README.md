@@ -2,7 +2,7 @@
 ### 运行游戏
 
 ```bash
-python main.py
+python src/main.py
 ```
 ---
 
@@ -39,5 +39,4 @@ python main.py
 - [Minecraft](https://www.minecraft.net/) – 灵感来源
 
 ---
-
 
