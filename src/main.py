@@ -286,14 +286,9 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
     result = False  # Return value: False = quit app, "homepage" = back to menu
     paused = False
     show_debug = settings["debug_default"]
-    pending_f3_toggle = False  # delayed F3 debug toggle (avoids F3+F4 conflict)
     f3_held = False
-    f3_pressed_this_frame = False
-    f4_pressed_this_frame = False
-    f3_release_pending = False
-    f4_release_pending = False
+    f4_held = False
     combo_consumed = False
-    mode_combo_pending = False
     chat = Chat(debug_font)
     pygame.mouse.set_visible(False)
 
@@ -303,6 +298,7 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
 
     while running:
         dt = clock.tick(FPS) / 16.667
+        chat.update(dt / 60.0)
         keys = pygame.key.get_pressed()
         mouse_buttons = pygame.mouse.get_pressed()
         mx, my = pygame.mouse.get_pos()
@@ -329,8 +325,6 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
         )
 
         # Event handling
-        f3_pressed_this_frame = False
-        f4_pressed_this_frame = False
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 result = False
@@ -364,6 +358,8 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
                 if chat.open:
                     command = chat.handle_event(event)
                     if command is not None:
+                        if command.strip():
+                            chat.add_message(f"> {command.strip()}" )
                         message, requested_mode, show_debug = execute_command(
                             command, player, current_mode.name, show_debug,
                             lambda value: setattr(player, "walk_speed", value),
@@ -381,22 +377,33 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
                     is_rmb_dragging = False
                     log_pause(username)
                 elif event.key == debug_key:
-                    # Delay the debug toggle so that F3+F4 (mode switch)
-                    # does not also toggle the debug overlay.
-                    pending_f3_toggle = True
-                    f3_pressed_this_frame = True
+                    if f3_held:
+                        continue
                     f3_held = True
-                    f3_release_pending = True
-                    if f4_release_pending:
-                        mode_combo_pending = True
+                    if f4_held:
+                        combo_consumed = True
+                        new_mode_name = CREATIVE if current_mode.name == SPECTATOR else SPECTATOR
+                        log_event(f"Mode Switch: user={username} from={current_mode.name} to={new_mode_name}")
+                        current_mode = create_mode(new_mode_name, player, world, textures, username)
+                        camera_offset_x = 0.0
+                        camera_offset_y = 0.0
+                        is_rmb_dragging = False
                 elif event.key == mode_key:
-                    # Defer the action until the mode key is released.
-                    f4_pressed_this_frame = True
-                    f4_release_pending = True
-                    if f3_held or f3_pressed_this_frame or keys[debug_key]:
-                        mode_combo_pending = True
+                    if f4_held:
+                        continue
+                    f4_held = True
+                    if f3_held:
+                        combo_consumed = True
+                        new_mode_name = CREATIVE if current_mode.name == SPECTATOR else SPECTATOR
+                        log_event(f"Mode Switch: user={username} from={current_mode.name} to={new_mode_name}")
+                        current_mode = create_mode(new_mode_name, player, world, textures, username)
+                        camera_offset_x = 0.0
+                        camera_offset_y = 0.0
+                        is_rmb_dragging = False
                 elif event.key == chat_key:
                     chat.open_chat()
+                elif event.key == pygame.K_SLASH:
+                    chat.open_chat("/")
                 elif event.key == pygame.K_F11:
                     is_fullscreen = not is_fullscreen
                     if is_fullscreen:
@@ -428,25 +435,19 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
 
             elif event.type == pygame.KEYUP and event.key == debug_key:
                 f3_held = False
-                if f3_release_pending:
-                    f3_release_pending = False
-                    if not mode_combo_pending and not combo_consumed:
-                        pending_f3_toggle = True
+                if not combo_consumed:
+                    show_debug = not show_debug
+                if not f4_held:
+                    combo_consumed = False
 
             elif event.type == pygame.KEYUP and event.key == mode_key:
-                if f4_release_pending:
-                    f4_release_pending = False
-                    if mode_combo_pending:
-                        mode_combo_pending = False
-                        combo_consumed = True
-                        new_mode_name = CREATIVE if current_mode.name == SPECTATOR else SPECTATOR
-                        log_event(f"Mode Switch: user={username} from={current_mode.name} to={new_mode_name}")
-                        current_mode = create_mode(new_mode_name, player, world, textures, username)
-                        camera_offset_x = 0.0
-                        camera_offset_y = 0.0
-                        is_rmb_dragging = False
+                f4_held = False
+                if not f3_held:
+                    combo_consumed = False
 
             elif event.type == pygame.MOUSEWHEEL:
+                if chat.scroll(event.y):
+                    continue
                 if event.y > 0:
                     new_size = block_size * ZOOM_FACTOR
                     max_bs = max(min(screen_width, screen_height) / 2, DEFAULT_BLOCK_SIZE)
@@ -456,17 +457,6 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
                     new_size = block_size / ZOOM_FACTOR
                     if new_size >= MIN_BLOCK_SIZE:
                         block_size = max(int(new_size), MIN_BLOCK_SIZE)
-
-        if mode_combo_pending:
-            pending_f3_toggle = False
-
-        # Apply pending debug overlay toggle (set by F3, cancelled by F3+F4)
-        if pending_f3_toggle and not f4_pressed_this_frame and not combo_consumed:
-            pending_f3_toggle = False
-            show_debug = not show_debug
-
-        if not f3_held and not f4_release_pending:
-            combo_consumed = False
 
         # Right mouse drag: only in spectator mode
         if not paused and current_mode.name == SPECTATOR:
