@@ -75,6 +75,54 @@ def save_settings(settings):
         log_event(f"Warning: failed to save settings: {e}")
 
 
+def player_settings_path(username: str) -> str:
+    """Get the per-player settings file path (config/<username>.json)."""
+    safe_user = "".join(c for c in username if c.isalnum() or c in ("-", "_"))
+    return os.path.join(CONFIG_DIR, f"{safe_user or 'player'}.json")
+
+
+def load_player_settings(username: str) -> dict:
+    """Load per-player settings, creating with defaults if absent."""
+    ensure_runtime_data()
+    path = player_settings_path(username)
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        settings = dict(DEFAULT_SETTINGS)
+        try:
+            with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
+                global_data = json.load(f)
+            for key in ("fullscreen", "language", "debug_default"):
+                if key in global_data:
+                    settings[key] = global_data[key]
+        except Exception:
+            pass
+        save_player_settings(username, settings)
+        return settings
+    settings = dict(DEFAULT_SETTINGS)
+    for key in ("fullscreen", "language", "debug_default"):
+        if key in data:
+            settings[key] = data[key]
+    for group in ("key_bindings", "movement", "void"):
+        settings[group] = dict(DEFAULT_SETTINGS[group])
+        if isinstance(data.get(group), dict):
+            settings[group].update(data[group])
+    return settings
+
+
+def save_player_settings(username: str, settings: dict):
+    """Persist per-player settings to config/<username>.json."""
+    try:
+        ensure_runtime_data()
+        path = player_settings_path(username)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(settings, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        log_event(f"Warning: failed to save player settings: {e}")
+
+
 def settings_screen(screen, screen_width, screen_height, settings):
     """
     Show the settings screen.

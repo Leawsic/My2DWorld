@@ -15,6 +15,7 @@ from homepage import homepage
 from logger import init_log, log_event, log_game_start, log_game_end, log_pause, log_resume
 from gamemodes import SPECTATOR, CREATIVE, MODE_LIST, create_mode
 from runtime import PROJECT_ROOT, WORLDS_DIR, ensure_runtime_data
+from settings import load_player_settings, save_player_settings
 from chat import Chat, execute_command
 
 # Constants
@@ -105,9 +106,9 @@ def load_world_save(username: str, world_name: str):
         return None
 
 
-def save_world_state(username: str, world_name: str, player, world):
+def save_world_state(username: str, world_name: str, player, world, gamemode=None):
     """
-    Save player foot position and broken block coordinates to disk.
+    Save player foot position, broken block coordinates, and gamemode to disk.
     """
     ensure_runtime_data()
     os.makedirs(WORLDS_DIR, exist_ok=True)
@@ -118,12 +119,15 @@ def save_world_state(username: str, world_name: str, player, world):
         "position_anchor": "feet_v2",
         "broken_blocks": [[bx, by] for bx, by in sorted(world.broken_blocks)],
     }
+    if gamemode:
+        data["gamemode"] = gamemode
     path = world_save_path(username, world_name)
     try:
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
         log_event(f"World Saved: user={username} world={world_name} "
-                  f"pos=({px:.1f},{py:.1f}) blocks={len(world.broken_blocks)}")
+                  f"pos=({px:.1f},{py:.1f}) blocks={len(world.broken_blocks)} "
+                  f"gamemode={gamemode or 'unknown'}")
     except Exception as e:
         log_event(f"Warning: failed to save world {path}: {e}")
 
@@ -262,6 +266,11 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
     else:
         start_px, start_py = 0, world.get_surface_height(0) + 0.001
 
+    # Restore gamemode from save if available
+    saved_gamemode = save_data.get("gamemode") if save_data else None
+    if saved_gamemode in (SPECTATOR, CREATIVE):
+        mode_name = saved_gamemode
+
     player = Player(start_x=start_px, start_y=start_py, settings=settings)
     spawn_x, spawn_y = 0.0, world.get_surface_height(0) + 0.001
     void_settings = settings.get("void", {})
@@ -295,6 +304,17 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
     # Welcome message timer
     welcome_msg = welcome_texts.get(current_lang, "").format(name=username)
     welcome_timer = 180  # ~3 seconds
+
+    # Per-player config persistence helper
+    def apply_speed(value):
+        player.walk_speed = value
+        settings["movement"]["walk_speed"] = value
+        save_player_settings(username, settings)
+
+    # State-change tracking for real-time persistence
+    last_mode_name = current_mode.name
+    last_show_debug = show_debug
+    autosave_timer = 0.0
 
     while running:
         dt = clock.tick(FPS) / 16.667
@@ -362,7 +382,7 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
                             chat.add_message(f"> {command.strip()}" )
                         message, requested_mode, show_debug = execute_command(
                             command, player, current_mode.name, show_debug,
-                            lambda value: setattr(player, "walk_speed", value),
+                            apply_speed,
                             lambda: player.reset(spawn_x, spawn_y),
                         )
                         chat.add_message(message)
@@ -457,6 +477,20 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
                     new_size = block_size / ZOOM_FACTOR
                     if new_size >= MIN_BLOCK_SIZE:
                         block_size = max(int(new_size), MIN_BLOCK_SIZE)
+
+        # Real-time persistence: save on gamemode or debug change, plus periodic autosave
+        if current_mode.name != last_mode_name:
+            save_world_state(username, world_name, player, world, current_mode.name)
+            last_mode_name = current_mode.name
+        if show_debug != last_show_debug:
+            settings["debug_default"] = show_debug
+            save_player_settings(username, settings)
+            last_show_debug = show_debug
+        if not paused:
+            autosave_timer += dt / 60.0
+            if autosave_timer >= 10.0:
+                save_world_state(username, world_name, player, world, current_mode.name)
+                autosave_timer = 0.0
 
         # Right mouse drag: only in spectator mode
         if not paused and current_mode.name == SPECTATOR:
@@ -654,8 +688,9 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
 
         pygame.display.flip()
 
-    # Save world state (player position + broken blocks) before exiting
-    save_world_state(username, world_name, player, world)
+    # Save world state and player settings before exiting
+    save_world_state(username, world_name, player, world, current_mode.name)
+    save_player_settings(username, settings)
 
     # Log game end before returning
     if result == "homepage":
@@ -693,6 +728,10 @@ def main():
             sys.exit()
 
         username, lang, settings, actual_width, actual_height = result
+
+        # Load per-player settings (creates config/<username>.json if absent)
+        settings = load_player_settings(username)
+        lang = settings["language"]
 
         from world_menu import world_menu
         world_result = world_menu(screen, actual_width, actual_height, username, lang)
