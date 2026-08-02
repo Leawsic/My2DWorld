@@ -308,8 +308,9 @@ class Player:
                 fy = int(math.ceil(top))
                 for wx in range(x_start, x_end + 1):
                     if world.get_block(wx, fy):
-                        # Place player top just below the ceiling block
-                        self.y = fy - 0.001 - height
+                        # Block fy occupies [fy - 1, fy]; the head must stop
+                        # just below its BOTTOM edge (fy - 1), not its top edge.
+                        self.y = (fy - 1) - 0.001 - height
                         self.velocity_y = 0.0
                         break
             elif dy < 0:  # moving down
@@ -349,12 +350,13 @@ class Player:
             if not landed:
                 self.on_ground = False
         else:  # moving up
-            # The head enters a block whose top-edge coordinate is ceil(top).
+            # The head enters a block whose bottom edge is fy - 1 (block fy
+            # occupies [fy - 1, fy]); push the head just below that bottom edge.
             fy = int(math.ceil(top))
             for wx in range(x_start, x_end + 1):
                 if world.get_block(wx, fy):
-                    # Head just below block fy: top at fy - 0.001
-                    self.y = fy - 0.001 - height
+                    # Head just below the ceiling block's bottom edge
+                    self.y = (fy - 1) - 0.001 - height
                     self.velocity_y = 0.0
                     break
 
