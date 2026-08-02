@@ -1,0 +1,2 @@
+[permissions]
+allow = ["Bash=python -c \"import json; d=json.load(open('translate/translate.json',encoding='utf-8')); print(json.dumps(d['gui'], ensure_ascii=False, indent=1)[:2500])\"", "Bash=python -c \"import ast; [ast.parse(open(f, encoding='utf-8').read()) for f in ['src/player.py','src/main.py','src/world_menu.py']]; print('syntax OK')\" ; python _verify_test.py"]

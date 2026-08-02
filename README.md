@@ -18,9 +18,11 @@ python src/main.py
 游戏内使用的 Pixabay 图片均经过修改，并已整合进游戏逻辑，未以独立形式分发。
 
 ---
+
 ## 字体资源声明
 
-本游戏使用了 **‘霞鹜文楷’ **字体，版权归 LXGW 所有，遵循 SIL Open Font License 1.1。
+本游戏使用了 ‘霞鹜文楷’字体，版权归 LXGW 所有，遵循 SIL Open Font License 1.1。
+
 ---
 
 ## 📜 许可证
@@ -37,6 +39,7 @@ python src/main.py
 - [Faithful Resource Pack](https://faithfulpack.net/) – 提供精美的纹理资源
 - [Pygame](https://www.pygame.org/) – 强大的 2D 游戏开发库
 - [Minecraft](https://www.minecraft.net/) – 灵感来源
+- [OpenGameArt](https://opengameart.org) – 大部分素材来源
+- [Pixabay](https://pixabay.com/) – 少部分素材来源
 
 ---
-
