@@ -23,7 +23,7 @@ FLY_SPEED = 3.5             # flying speed (blocks/sec)
 JUMP_VELOCITY = 9.5         # initial upward velocity for a jump (blocks/sec)
 MAX_JUMPS = 2               # double jump support
 GRAVITY = 14.0              # downward acceleration (blocks/sec²)
-FLY_HOLD_TIME = 3.0         # seconds of holding space to toggle flying
+DOUBLE_SPACE_WINDOW = 0.35  # seconds allowed between two space presses
 
 # Collision box (relative to the player's feet).
 # Width: 0.5 blocks, height: 1.9 blocks. ``y`` is the foot coordinate.
@@ -70,7 +70,7 @@ class Player:
     World Y increases upward.
     """
 
-    def __init__(self, start_x: float = 0, start_y: float = 50):
+    def __init__(self, start_x: float = 0, start_y: float = 50, settings=None):
         self.x = float(start_x)
         self.y = float(start_y)
 
@@ -80,9 +80,17 @@ class Player:
         self.on_ground = False
         self.jumps_used = 0
         self.flying = False
-        self.fly_hold_timer = 0.0      # seconds holding space to trigger fly toggle
-        self.fly_toggled = False       # prevents re-toggling while still holding
+        self.double_space_timer = 0.0  # remaining time for the second press
         self.space_was_down = False    # for jump edge detection
+        self.settings = settings or {}
+        movement = self.settings.get("movement", {})
+        self.walk_speed = float(movement.get("walk_speed", WALK_SPEED))
+        self.fly_speed = float(movement.get("fly_speed", FLY_SPEED))
+        self.jump_velocity = float(movement.get("jump_velocity", JUMP_VELOCITY))
+        self.gravity = float(movement.get("gravity", GRAVITY))
+        void_settings = self.settings.get("void", {})
+        self.max_health = float(void_settings.get("max_health", 20.0))
+        self.health = self.max_health
 
         # Animation state
         self.textures = load_player_textures()
@@ -102,24 +110,24 @@ class Player:
         """
         dt_sec = dt / 60.0  # real seconds
 
-        self._handle_fly_toggle(keys, dt_sec)
+        fly_toggled = self._handle_fly_toggle(keys, dt_sec)
 
         # Horizontal input
         self.velocity_x = 0.0
         moving_horizontal = False
-        if keys[pygame.K_a] or keys[pygame.K_LEFT]:
-            self.velocity_x = -WALK_SPEED
+        if self._key_down(keys, "left"):
+            self.velocity_x = -self.walk_speed
             self.facing = -1
             moving_horizontal = True
-        if keys[pygame.K_d] or keys[pygame.K_RIGHT]:
-            self.velocity_x = WALK_SPEED
+        if self._key_down(keys, "right"):
+            self.velocity_x = self.walk_speed
             self.facing = 1
             moving_horizontal = True
 
         if self.flying:
             self._update_flying(keys)
         else:
-            self._update_grounded(keys)
+            self._update_grounded(keys, allow_jump=not fly_toggled)
 
         # Apply movement with collision in X and Y separately (using real seconds)
         self._move_and_collide_x(world, dt_sec)
@@ -131,6 +139,19 @@ class Player:
     def get_pos(self):
         """Get (x, y) foot position."""
         return self.x, self.y
+
+    def _key_down(self, keys, action):
+        name = self.settings.get("key_bindings", {}).get(action)
+        aliases = {"space": pygame.K_SPACE, "left": pygame.K_LEFT,
+                   "right": pygame.K_RIGHT, "up": pygame.K_UP,
+                   "down": pygame.K_DOWN}
+        key = aliases.get(name)
+        if key is None and name:
+            key_name = str(name)
+            key = getattr(pygame, f"K_{key_name.lower()}", None)
+            if key is None:
+                key = getattr(pygame, f"K_{key_name.upper()}", None)
+        return bool(key is not None and keys[key])
 
     def get_collision_rect(self):
         """
@@ -150,9 +171,9 @@ class Player:
         self.on_ground = False
         self.jumps_used = 0
         self.flying = False
-        self.fly_hold_timer = 0.0
-        self.fly_toggled = False
+        self.double_space_timer = 0.0
         self.space_was_down = False
+        self.health = self.max_health
         self.anim_state = "stand"
         self.anim_frame = 0
         self.anim_timer = 0.0
@@ -198,43 +219,44 @@ class Player:
     # Physics helpers
     # ------------------------------------------------------------------
     def _handle_fly_toggle(self, keys, dt_sec):
-        """Hold space for FLY_HOLD_TIME seconds to toggle flying."""
-        space_down = keys[pygame.K_SPACE]
-        if space_down:
-            self.fly_hold_timer += dt_sec
-            if self.fly_hold_timer >= FLY_HOLD_TIME and not self.fly_toggled:
+        """Toggle flying when space is pressed twice within a short window."""
+        self.double_space_timer = max(0.0, self.double_space_timer - dt_sec)
+        space_down = self._key_down(keys, "jump")
+        pressed = space_down and not self.space_was_down
+        toggled = False
+        if pressed:
+            if self.double_space_timer > 0.0:
                 self.flying = not self.flying
-                self.fly_toggled = True
+                toggled = True
                 self.velocity_y = 0.0
                 self.jumps_used = 0
-        else:
-            self.fly_hold_timer = 0.0
-            self.fly_toggled = False
+            self.double_space_timer = DOUBLE_SPACE_WINDOW
+        return toggled
 
     def _update_flying(self, keys):
         """Flying movement: no gravity, free WASD, faster speed."""
         # Horizontal velocity already set in update(); only set vertical here.
-        if keys[pygame.K_w] or keys[pygame.K_UP]:
-            self.velocity_y = FLY_SPEED
-        elif keys[pygame.K_s] or keys[pygame.K_DOWN]:
-            self.velocity_y = -FLY_SPEED
+        if self._key_down(keys, "up"):
+            self.velocity_y = self.fly_speed
+        elif self._key_down(keys, "down"):
+            self.velocity_y = -self.fly_speed
         else:
             self.velocity_y = 0.0
         # Track space edge state so returning to ground does not auto-jump.
-        self.space_was_down = keys[pygame.K_SPACE]
+        self.space_was_down = self._key_down(keys, "jump")
 
-    def _update_grounded(self, keys):
+    def _update_grounded(self, keys, allow_jump=True):
         """Gravity + jump handling (non-flying)."""
         # Jump on space press edge (not simple hold).
-        space_down = keys[pygame.K_SPACE]
-        if space_down and not self.space_was_down and self.fly_hold_timer < 0.05:
+        space_down = self._key_down(keys, "jump")
+        if allow_jump and space_down and not self.space_was_down:
             self._try_jump()
         self.space_was_down = space_down
 
     def _try_jump(self):
         """Attempt a jump if jumps remain (ground jump + air jump = double jump)."""
         if self.jumps_used < MAX_JUMPS:
-            self.velocity_y = JUMP_VELOCITY
+            self.velocity_y = self.jump_velocity
             self.jumps_used += 1
             self.on_ground = False
 
@@ -300,7 +322,7 @@ class Player:
             return
 
         # Apply gravity (velocity decreases over real time)
-        self.velocity_y -= GRAVITY * dt_sec
+        self.velocity_y -= self.gravity * dt_sec
 
         dy = self.velocity_y * dt_sec
         self.y += dy

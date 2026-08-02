@@ -15,6 +15,7 @@ from homepage import homepage
 from logger import init_log, log_event, log_game_start, log_game_end, log_pause, log_resume
 from gamemodes import SPECTATOR, CREATIVE, MODE_LIST, create_mode
 from runtime import PROJECT_ROOT, WORLDS_DIR, ensure_runtime_data
+from chat import Chat, execute_command
 
 # Constants
 INITIAL_WIDTH = 1024
@@ -186,6 +187,30 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
     current_lang = lang
 
     is_fullscreen = settings["fullscreen"]
+    key_bindings = settings.get("key_bindings", {})
+
+    def configured_key(action, fallback):
+        name = key_bindings.get(action, fallback)
+        aliases = {"space": pygame.K_SPACE, "left": pygame.K_LEFT,
+                   "right": pygame.K_RIGHT, "up": pygame.K_UP,
+                   "down": pygame.K_DOWN}
+        if name in aliases:
+            return aliases[name]
+        key_name = str(name)
+        key = getattr(pygame, f"K_{key_name.lower()}", None)
+        if key is None:
+            key = getattr(pygame, f"K_{key_name.upper()}", None)
+        if key is not None:
+            return key
+        fallback_name = str(fallback)
+        key = getattr(pygame, f"K_{fallback_name.lower()}", None)
+        if key is None:
+            key = getattr(pygame, f"K_{fallback_name.upper()}", None)
+        return key
+
+    debug_key = configured_key("debug", "f3")
+    mode_key = configured_key("mode", "f4")
+    chat_key = configured_key("chat", "t")
 
     pygame.display.set_caption(window_title_texts.get(current_lang, "My2DWorld"))
     clock = pygame.time.Clock()
@@ -237,7 +262,11 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
     else:
         start_px, start_py = 0, world.get_surface_height(0) + 0.001
 
-    player = Player(start_x=start_px, start_y=start_py)
+    player = Player(start_x=start_px, start_y=start_py, settings=settings)
+    spawn_x, spawn_y = 0.0, world.get_surface_height(0) + 0.001
+    void_settings = settings.get("void", {})
+    void_death_y = float(void_settings.get("death_y", -10.0))
+    void_damage = float(void_settings.get("damage", 20.0))
     world.update_view(player.x)
 
     # Zoom state
@@ -258,6 +287,14 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
     paused = False
     show_debug = settings["debug_default"]
     pending_f3_toggle = False  # delayed F3 debug toggle (avoids F3+F4 conflict)
+    f3_held = False
+    f3_pressed_this_frame = False
+    f4_pressed_this_frame = False
+    f3_release_pending = False
+    f4_release_pending = False
+    combo_consumed = False
+    mode_combo_pending = False
+    chat = Chat(debug_font)
     pygame.mouse.set_visible(False)
 
     # Welcome message timer
@@ -292,6 +329,8 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
         )
 
         # Event handling
+        f3_pressed_this_frame = False
+        f4_pressed_this_frame = False
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 result = False
@@ -322,26 +361,42 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
                 )
 
             elif event.type == pygame.KEYDOWN:
+                if chat.open:
+                    command = chat.handle_event(event)
+                    if command is not None:
+                        message, requested_mode, show_debug = execute_command(
+                            command, player, current_mode.name, show_debug,
+                            lambda value: setattr(player, "walk_speed", value),
+                            lambda: player.reset(spawn_x, spawn_y),
+                        )
+                        chat.add_message(message)
+                        if requested_mode != current_mode.name:
+                            current_mode = create_mode(
+                                requested_mode, player, world, textures, username
+                            )
+                    continue
                 if event.key == pygame.K_ESCAPE:
                     paused = True
                     pygame.mouse.set_visible(True)
                     is_rmb_dragging = False
                     log_pause(username)
-                elif event.key == pygame.K_F3:
+                elif event.key == debug_key:
                     # Delay the debug toggle so that F3+F4 (mode switch)
                     # does not also toggle the debug overlay.
                     pending_f3_toggle = True
-                elif event.key == pygame.K_F4:
-                    # F3+F4 or Ctrl+F4: switch between spectator and creative modes.
-                    if keys[pygame.K_F3] or (event.mod & pygame.KMOD_CTRL):
-                        pending_f3_toggle = False  # cancel debug toggle
-                        new_mode_name = CREATIVE if current_mode.name == SPECTATOR else SPECTATOR
-                        log_event(f"Mode Switch: user={username} from={current_mode.name} to={new_mode_name}")
-                        current_mode = create_mode(new_mode_name, player, world, textures, username)
-                        # Reset camera offsets so the view centers on the player again.
-                        camera_offset_x = 0.0
-                        camera_offset_y = 0.0
-                        is_rmb_dragging = False
+                    f3_pressed_this_frame = True
+                    f3_held = True
+                    f3_release_pending = True
+                    if f4_release_pending:
+                        mode_combo_pending = True
+                elif event.key == mode_key:
+                    # Defer the action until the mode key is released.
+                    f4_pressed_this_frame = True
+                    f4_release_pending = True
+                    if f3_held or f3_pressed_this_frame or keys[debug_key]:
+                        mode_combo_pending = True
+                elif event.key == chat_key:
+                    chat.open_chat()
                 elif event.key == pygame.K_F11:
                     is_fullscreen = not is_fullscreen
                     if is_fullscreen:
@@ -371,6 +426,26 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
                         return txt
                     t = t_updated
 
+            elif event.type == pygame.KEYUP and event.key == debug_key:
+                f3_held = False
+                if f3_release_pending:
+                    f3_release_pending = False
+                    if not mode_combo_pending and not combo_consumed:
+                        pending_f3_toggle = True
+
+            elif event.type == pygame.KEYUP and event.key == mode_key:
+                if f4_release_pending:
+                    f4_release_pending = False
+                    if mode_combo_pending:
+                        mode_combo_pending = False
+                        combo_consumed = True
+                        new_mode_name = CREATIVE if current_mode.name == SPECTATOR else SPECTATOR
+                        log_event(f"Mode Switch: user={username} from={current_mode.name} to={new_mode_name}")
+                        current_mode = create_mode(new_mode_name, player, world, textures, username)
+                        camera_offset_x = 0.0
+                        camera_offset_y = 0.0
+                        is_rmb_dragging = False
+
             elif event.type == pygame.MOUSEWHEEL:
                 if event.y > 0:
                     new_size = block_size * ZOOM_FACTOR
@@ -382,10 +457,16 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
                     if new_size >= MIN_BLOCK_SIZE:
                         block_size = max(int(new_size), MIN_BLOCK_SIZE)
 
+        if mode_combo_pending:
+            pending_f3_toggle = False
+
         # Apply pending debug overlay toggle (set by F3, cancelled by F3+F4)
-        if pending_f3_toggle:
+        if pending_f3_toggle and not f4_pressed_this_frame and not combo_consumed:
             pending_f3_toggle = False
             show_debug = not show_debug
+
+        if not f3_held and not f4_release_pending:
+            combo_consumed = False
 
         # Right mouse drag: only in spectator mode
         if not paused and current_mode.name == SPECTATOR:
@@ -427,7 +508,7 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
         world_my = camera_y - (my - cy_off) / block_size
         wx = int(math.floor(world_mx))
         wy = int(math.ceil(world_my))
-        if not paused and world_my >= 1:
+        if not paused and world_my > 0:
             bt = world.get_block(wx, wy)
             if bt:
                 hovered_block = bt
@@ -438,8 +519,13 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
                 hovered_info = (wx, wy, bt)
 
         # Update current game mode (player physics, particles, block breaking)
-        if not paused:
+        if not paused and not chat.open:
             current_mode.update(dt, keys, mouse_buttons, mx, my, block_size, hovered_info)
+            if player.y < void_death_y:
+                player.health -= void_damage * (dt / 60.0)
+                if player.health <= 0:
+                    player.reset(spawn_x, spawn_y)
+                    chat.add_message("You died and respawned.")
         px, py = player.get_pos()
         camera_x = px + camera_offset_x
         camera_y = py + camera_offset_y
@@ -573,6 +659,8 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
                 pygame.draw.rect(screen, (100, 200, 255), rect, 2, border_radius=6)
                 label_surf = pause_button_font.render(label, True, (255, 255, 255))
                 screen.blit(label_surf, label_surf.get_rect(center=rect.center))
+
+        chat.draw(screen, screen_width, screen_height)
 
         pygame.display.flip()
 

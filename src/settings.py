@@ -20,6 +20,15 @@ DEFAULT_SETTINGS = {
     "fullscreen": False,
     "language": "zh",
     "debug_default": True,
+    "key_bindings": {
+        "left": "a", "right": "d", "up": "w", "down": "s",
+        "jump": "space", "debug": "f3", "mode": "f4", "chat": "t",
+    },
+    "movement": {
+        "walk_speed": 1.8, "fly_speed": 3.5, "jump_velocity": 9.5,
+        "gravity": 14.0,
+    },
+    "void": {"death_y": -10.0, "damage": 20.0, "max_health": 20.0},
 }
 
 # Colors
@@ -45,7 +54,13 @@ def load_settings():
     except Exception:
         return dict(DEFAULT_SETTINGS)
     settings = dict(DEFAULT_SETTINGS)
-    settings.update({k: v for k, v in data.items() if k in DEFAULT_SETTINGS})
+    for key in ("fullscreen", "language", "debug_default"):
+        if key in data:
+            settings[key] = data[key]
+    for group in ("key_bindings", "movement", "void"):
+        settings[group] = dict(DEFAULT_SETTINGS[group])
+        if isinstance(data.get(group), dict):
+            settings[group].update(data[group])
     return settings
 
 
