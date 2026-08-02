@@ -365,21 +365,10 @@ class Player:
     # ------------------------------------------------------------------
     def _update_animation(self, dt_sec):
         """Advance animation state based on actual movement (velocity)."""
-        moving = False
-        if self.flying:
-            # In flight: animate only when moving horizontally.
-            # Vertical-only movement (W/S) keeps the stand frame.
-            moving = (abs(self.velocity_x) > 0.05)
-        else:
-            # Grounded: animate only when walking horizontally on ground.
-            if self.on_ground and abs(self.velocity_x) > 0.05:
-                moving = True
-            elif self.on_ground:
-                # Standing still on ground.
-                moving = False
-            else:
-                # In the air (jumping/falling): use stand frames.
-                moving = False
+        # Walk animation whenever moving horizontally — on the ground or
+        # mid-air (jumping/falling). Vertical-only movement keeps the
+        # stand frame (e.g. flying up/down or a pure vertical jump).
+        moving = abs(self.velocity_x) > 0.05
 
         if moving:
             self._set_move_anim(dt_sec)

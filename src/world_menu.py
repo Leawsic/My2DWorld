@@ -26,6 +26,30 @@ from runtime import WORLDS_DIR, ensure_runtime_data
 
 MAX_WORLD_NAME_LENGTH = 24
 
+# Per-world physics parameters (merged into player settings on world enter).
+PHYSICS_DEFAULTS = {
+    "walk_speed": 1.8,
+    "fly_speed": 3.5,
+    "jump_velocity": 9.5,
+    "gravity": 14.0,
+}
+PHYSICS_KEYS = tuple(PHYSICS_DEFAULTS)
+PHYSICS_MIN, PHYSICS_MAX = 0.1, 100.0
+
+
+def _filter_number(text):
+    """Keep only characters valid in a decimal number (digits, dot, sign)."""
+    return "".join(ch for ch in text if ch in "0123456789.-")
+
+
+def _parse_physics(text, default):
+    """Parse a physics input; fall back to ``default`` when invalid/out of range."""
+    try:
+        value = float(text.strip())
+    except ValueError:
+        return default
+    return max(PHYSICS_MIN, min(PHYSICS_MAX, value))
+
 
 def _worlds_path(username):
     safe_username = "".join(
@@ -82,6 +106,16 @@ def world_menu(screen, screen_width, screen_height, username, lang):
     message = ""
     world_name_input = TextInput(0, 0, BUTTON_WIDTH, 40, input_font,
                                  max_length=MAX_WORLD_NAME_LENGTH)
+    physics_inputs = {
+        key: TextInput(0, 0, 220, 40, input_font, max_length=8)
+        for key in PHYSICS_KEYS
+    }
+
+    def collect_physics():
+        """Read current physics inputs, falling back to defaults for bad values."""
+        return {key: _parse_physics(physics_inputs[key].text, PHYSICS_DEFAULTS[key])
+                for key in PHYSICS_KEYS}
+
     pygame.mouse.set_visible(True)
 
     while True:
@@ -119,17 +153,17 @@ def world_menu(screen, screen_width, screen_height, username, lang):
 
         if editing_index is not None:
             world_name_input.rect.topleft = (center_x - BUTTON_WIDTH // 2,
-                                             content_y + 60)
-            confirm_btn = Button(center_x - BUTTON_WIDTH // 2, content_y + 110,
+                                             content_y + 40)
+            confirm_btn = Button(center_x - BUTTON_WIDTH // 2, content_y + 342,
                                  BUTTON_WIDTH, BUTTON_HEIGHT, "", button_font)
-            cancel_btn = Button(center_x - BUTTON_WIDTH // 2, content_y + 166,
+            cancel_btn = Button(center_x - BUTTON_WIDTH // 2, content_y + 398,
                                 BUTTON_WIDTH, 40, "", button_font)
             confirm_btn.set_text(t(trans, "world_edit_confirm", lang))
             cancel_btn.set_text(t(trans, "world_cancel", lang))
 
             # Mode selection: two toggle buttons side by side.
             mode_half_width = (BUTTON_WIDTH - 10) // 2
-            mode_label_y = content_y + 212
+            mode_label_y = content_y + 92
             spec_mode_btn = Button(center_x - BUTTON_WIDTH // 2, mode_label_y,
                                    mode_half_width, 40, "", button_font)
             crea_mode_btn = Button(spec_mode_btn.rect.right + 10, mode_label_y,
@@ -138,6 +172,14 @@ def world_menu(screen, screen_width, screen_height, username, lang):
             crea_mode_btn.set_text(t(trans, "world_mode_creative", lang))
             spec_mode_btn.color = ACTIVE_COLOR if new_mode == "spectator" else BUTTON_COLOR
             crea_mode_btn.color = ACTIVE_COLOR if new_mode == "creative" else BUTTON_COLOR
+
+            # Physics parameter inputs (one row per parameter).
+            physics_row_y = content_y + 160
+            physics_label_midright_x = center_x - BUTTON_WIDTH // 2 - 12
+            physics_input_x = center_x - BUTTON_WIDTH // 2 + 10
+            for index, key in enumerate(PHYSICS_KEYS):
+                physics_inputs[key].rect.topleft = (
+                    physics_input_x, physics_row_y + index * 44)
         else:
             confirm_btn = cancel_btn = None
             spec_mode_btn = crea_mode_btn = None
@@ -190,6 +232,7 @@ def world_menu(screen, screen_width, screen_height, username, lang):
                     else:
                         worlds[editing_index]["name"] = new_name
                         worlds[editing_index]["mode"] = new_mode
+                        worlds[editing_index]["physics"] = collect_physics()
                         if save_worlds(username, worlds):
                             event_name = "World Created" if creating_world else "World Renamed"
                             log_event(f"{event_name}: user={username} world={new_name} mode={new_mode}")
@@ -204,6 +247,10 @@ def world_menu(screen, screen_width, screen_height, username, lang):
                 elif editing_index is not None:
                     world_name_input.handle_event(event)
                     world_name_input.text = world_name_input.text[:MAX_WORLD_NAME_LENGTH]
+                    for key in PHYSICS_KEYS:
+                        inp = physics_inputs[key]
+                        inp.handle_event(event)
+                        inp.text = _filter_number(inp.text)[:8]
 
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if editing_index is not None:
@@ -213,6 +260,10 @@ def world_menu(screen, screen_width, screen_height, username, lang):
                     assert crea_mode_btn is not None
                     world_name_input.handle_event(event)
                     world_name_input.text = world_name_input.text[:MAX_WORLD_NAME_LENGTH]
+                    for key in PHYSICS_KEYS:
+                        inp = physics_inputs[key]
+                        inp.handle_event(event)
+                        inp.text = _filter_number(inp.text)[:8]
                     if spec_mode_btn and spec_mode_btn.handle_event(event):
                         new_mode = "spectator"
                         message = ""
@@ -229,6 +280,7 @@ def world_menu(screen, screen_width, screen_height, username, lang):
                         else:
                             worlds[editing_index]["name"] = new_name
                             worlds[editing_index]["mode"] = new_mode
+                            worlds[editing_index]["physics"] = collect_physics()
                             if save_worlds(username, worlds):
                                 event_name = "World Created" if creating_world else "World Renamed"
                                 log_event(f"{event_name}: user={username} world={new_name} mode={new_mode}")
@@ -249,6 +301,7 @@ def world_menu(screen, screen_width, screen_height, username, lang):
                         message = ""
                 elif create_btn.handle_event(event):
                     worlds.append({"name": "", "mode": "spectator",
+                                   "physics": dict(PHYSICS_DEFAULTS),
                                    "created_at": datetime.now().isoformat(timespec="seconds")})
                     new_mode = "spectator"
                     editing_index = len(worlds) - 1
@@ -256,6 +309,9 @@ def world_menu(screen, screen_width, screen_height, username, lang):
                     world_name_input.text = ""
                     world_name_input.cursor_index = 0
                     world_name_input.active = True
+                    for key in PHYSICS_KEYS:
+                        physics_inputs[key].text = str(PHYSICS_DEFAULTS[key])
+                        physics_inputs[key].cursor_index = len(physics_inputs[key].text)
                     message = ""
                 elif back_btn.handle_event(event):
                     return "back"
@@ -273,6 +329,13 @@ def world_menu(screen, screen_width, screen_height, username, lang):
                             world_name_input.text = worlds[world_index]["name"]
                             world_name_input.cursor_index = len(world_name_input.text)
                             world_name_input.active = True
+                            saved_physics = worlds[world_index].get("physics") or {}
+                            for key in PHYSICS_KEYS:
+                                default = PHYSICS_DEFAULTS[key]
+                                physics_inputs[key].text = str(
+                                    saved_physics.get(key, default))
+                                physics_inputs[key].cursor_index = len(
+                                    physics_inputs[key].text)
                             message = ""
                         elif delete_btn.handle_event(event):
                             name = worlds[world_index]["name"]
@@ -311,6 +374,19 @@ def world_menu(screen, screen_width, screen_height, username, lang):
             screen.blit(mode_lbl, mode_lbl_rect)
             spec_mode_btn.draw(screen)
             crea_mode_btn.draw(screen)
+
+            # Physics parameter inputs (title + one labeled row per parameter).
+            phys_title = input_font.render(t(trans, "world_physics", lang),
+                                           True, TEXT_COLOR)
+            screen.blit(phys_title, (world_name_input.rect.x, content_y + 146))
+            for key in PHYSICS_KEYS:
+                inp = physics_inputs[key]
+                lbl_text = t(trans, f"world_{key}", lang)
+                lbl = input_font.render(lbl_text, True, TEXT_COLOR)
+                lbl_rect = lbl.get_rect(midright=(physics_label_midright_x,
+                                                  inp.rect.centery))
+                screen.blit(lbl, lbl_rect)
+                inp.draw(screen)
         else:
             create_btn.draw(screen)
             for _, enter_btn, edit_btn, delete_btn in row_controls:

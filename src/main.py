@@ -626,10 +626,6 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
                     except KeyError:
                         pass
                 return txt
-            hover_debug = ""
-            if hovered_block:
-                name = block_name(hovered_block)
-                hover_debug = tref("debug_hover", name=name)
             # Controls hint depends on current mode
             if current_mode.name == CREATIVE:
                 controls_line = gui_section.get("controls_hint", {}).get(
@@ -642,15 +638,24 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
                 tref("debug_world", name=world_name),
                 tref("debug_player", x=px, y=py),
                 tref("debug_camera", x=camera_x, y=camera_y),
-                tref("debug_mouse", mx=mx, my=my, wx=wx, wy=wy) + hover_debug,
+                tref("debug_mouse", mx=mx, my=my, wx=wx, wy=wy),
+            ]
+            if hovered_block:
+                lines.append(tref("debug_hover", name=block_name(hovered_block)))
+            lines += [
                 tref("debug_zoom", pct=zoom_pct),
-                tref("debug_window", w=screen_width, h=screen_height) +
-                (tref("debug_fullscreen") if is_fullscreen else ""),
+                tref("debug_window", w=screen_width, h=screen_height),
+            ]
+            if is_fullscreen:
+                lines.append(tref("debug_fullscreen"))
+            lines += [
                 tref("debug_chunks", n=len(world.chunks)),
                 tref("debug_textures", n=len(textures)),
                 tref("debug_lang"),
-                controls_line,
             ]
+            # Controls hint: render one keybinding per line (split on " | ").
+            lines.extend(part.strip() for part in controls_line.split("|")
+                         if part.strip())
             for i, line in enumerate(lines):
                 text_surf = debug_font.render(line, True, (255, 255, 255))
                 shadow = debug_font.render(line, True, (0, 0, 0))
@@ -733,7 +738,7 @@ def main():
         settings = load_player_settings(username)
         lang = settings["language"]
 
-        from world_menu import world_menu
+        from world_menu import load_worlds, world_menu
         world_result = world_menu(screen, actual_width, actual_height, username, lang)
         if world_result is None:
             break
@@ -741,6 +746,19 @@ def main():
             screen_width, screen_height = actual_width, actual_height
             continue
         world_name, mode_name, screen, actual_width, actual_height = world_result
+
+        # Apply per-world physics (gravity, speeds) configured at world
+        # creation/edit — overrides the player's default movement settings.
+        try:
+            for world_entry in load_worlds(username):
+                if (world_entry.get("name") == world_name
+                        and isinstance(world_entry.get("physics"), dict)):
+                    movement = dict(settings.get("movement", {}))
+                    movement.update(world_entry["physics"])
+                    settings["movement"] = movement
+                    break
+        except Exception as exc:
+            log_event(f"Warning: failed to apply world physics for {world_name}: {exc}")
 
         # Start the game with actual screen dimensions (fixes maximize/fullscreen scaling)
         game_result = start_game(screen, actual_width, actual_height,
