@@ -245,9 +245,10 @@ class Player:
 
         left, bottom, width, height = self.get_collision_rect()
         top = bottom + height
-        # All rows the collision box may touch (inclusive)
-        y_start = int(math.floor(bottom))
-        y_end = int(math.floor(top))
+        # World block ``y`` is its top edge, so block y occupies [y - 1, y].
+        # Convert the player's continuous vertical span to those block indices.
+        y_start = int(math.floor(bottom)) + 1
+        y_end = int(math.ceil(top))
 
         if dx > 0:  # moving right
             # Right edge entered a block at column floor(left + width)
@@ -282,7 +283,7 @@ class Player:
             if x_end < x_start:
                 x_end = x_start
             if dy > 0:  # moving up
-                fy = int(math.floor(top))
+                fy = int(math.ceil(top))
                 for wx in range(x_start, x_end + 1):
                     if world.get_block(wx, fy):
                         # Place player top just below the ceiling block
@@ -290,10 +291,10 @@ class Player:
                         self.velocity_y = 0.0
                         break
             elif dy < 0:  # moving down
-                fy = int(math.floor(bottom))
+                fy = int(math.ceil(bottom))
                 for wx in range(x_start, x_end + 1):
                     if world.get_block(wx, fy):
-                        self.y = fy + 1 + 0.001
+                        self.y = fy + 0.001
                         self.velocity_y = 0.0
                         break
             return
@@ -311,13 +312,13 @@ class Player:
             x_end = x_start
 
         if dy < 0:  # moving down (falling)
-            # The feet have entered block at row floor(bottom) if that block exists.
-            fy = int(math.floor(bottom))
+            # Block y occupies [y - 1, y], so feet enter row ceil(bottom).
+            fy = int(math.ceil(bottom))
             landed = False
             for wx in range(x_start, x_end + 1):
                 if world.get_block(wx, fy):
-                    # Standing on top of block fy: feet at fy + 1
-                    self.y = (fy + 1) + 0.001
+                    # Standing on top of block fy: feet at fy.
+                    self.y = fy + 0.001
                     self.velocity_y = 0.0
                     self.on_ground = True
                     self.jumps_used = 0
@@ -326,8 +327,8 @@ class Player:
             if not landed:
                 self.on_ground = False
         else:  # moving up
-            # Head has entered block at row floor(top) if that block exists.
-            fy = int(math.floor(top))
+            # The head enters a block whose top-edge coordinate is ceil(top).
+            fy = int(math.ceil(top))
             for wx in range(x_start, x_end + 1):
                 if world.get_block(wx, fy):
                     # Head just below block fy: top at fy - 0.001

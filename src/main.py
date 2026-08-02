@@ -114,7 +114,7 @@ def save_world_state(username: str, world_name: str, player, world):
     data = {
         "player_x": px,
         "player_y": py,
-        "position_anchor": "feet",
+        "position_anchor": "feet_v2",
         "broken_blocks": [[bx, by] for bx, by in sorted(world.broken_blocks)],
     }
     path = world_save_path(username, world_name)
@@ -221,9 +221,13 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
         try:
             start_px = float(save_data.get("player_x", 0))
             start_py = float(save_data.get("player_y", 0))
-            # Older saves stored the player center instead of the foot anchor.
-            if save_data.get("position_anchor") != "feet":
-                start_py -= BODY_HALF_HEIGHT
+            anchor = save_data.get("position_anchor")
+            # Older saves used a center anchor. The first foot-anchor revision
+            # still used the wrong block-bottom convention and was one block high.
+            if anchor == "feet":
+                start_py -= 1
+            elif anchor != "feet_v2":
+                start_py -= BODY_HALF_HEIGHT + 1
         except (TypeError, ValueError):
             start_px, start_py = 0, 0
         broken = save_data.get("broken_blocks", [])
@@ -231,7 +235,7 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
         log_event(f"World Loaded: user={username} world={world_name} "
                   f"pos=({start_px:.1f},{start_py:.1f}) blocks={len(world.broken_blocks)}")
     else:
-        start_px, start_py = 0, world.get_surface_height(0) + 1.001
+        start_px, start_py = 0, world.get_surface_height(0) + 0.001
 
     player = Player(start_x=start_px, start_y=start_py)
     world.update_view(player.x)
@@ -629,9 +633,9 @@ def main():
             # User quit the app from the pause menu
             break
 
-        # User chose "back to menu" - loop back to the homepage
-        # Use the dimensions from the homepage for the next cycle
-        screen_width, screen_height = actual_width, actual_height
+        # The game may have resized or maximized the display. Read the live
+        # surface dimensions instead of reusing its pre-game cached size.
+        screen_width, screen_height = screen.get_size()
 
     pygame.quit()
     sys.exit()
