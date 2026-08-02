@@ -118,6 +118,8 @@ def save_world_state(username: str, world_name: str, player, world, gamemode=Non
         "player_y": py,
         "position_anchor": "feet_v2",
         "broken_blocks": [[bx, by] for bx, by in sorted(world.broken_blocks)],
+        "placed_blocks": [[bx, by, block_type]
+                          for (bx, by), block_type in sorted(world.placed_blocks.items())],
     }
     if gamemode:
         data["gamemode"] = gamemode
@@ -261,6 +263,8 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
             start_px, start_py = 0, 0
         broken = save_data.get("broken_blocks", [])
         world.apply_broken_blocks(broken if isinstance(broken, list) else [])
+        world.update_view(start_px)
+        world.apply_placed_blocks(save_data.get("placed_blocks", []))
         log_event(f"World Loaded: user={username} world={world_name} "
                   f"pos=({start_px:.1f},{start_py:.1f}) blocks={len(world.broken_blocks)}")
     else:
@@ -277,6 +281,46 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
     void_death_y = float(void_settings.get("death_y", -10.0))
     void_damage = float(void_settings.get("damage", 20.0))
     world.update_view(player.x)
+    camera_x = player.x
+    camera_y = player.y
+
+    # The hotbar uses real block textures and keeps its inventory deliberately small.
+    hotbar_blocks = [
+        "grass_block_side", "dirt", "stone", "cobblestone", "mossy_cobblestone",
+        "coal_block", "iron_block", "gold_block", "diamond_block",
+    ]
+    hotbar_blocks = [block for block in hotbar_blocks if block in textures]
+    selected_hotbar = 0
+
+    def hotbar_geometry():
+        slot_size = 44
+        gap = 2
+        bar_width = len(hotbar_blocks) * slot_size + (len(hotbar_blocks) - 1) * gap + 12
+        bar_height = slot_size + 12
+        bar_x = (screen_width - bar_width) // 2
+        bar_y = screen_height - bar_height - 14
+        return pygame.Rect(bar_x, bar_y, bar_width, bar_height), slot_size, gap
+
+    def get_placement_target(mouse_x, mouse_y):
+        """Return the block cell targeted by right-click placement."""
+        center_x = screen_width // 2
+        center_y = screen_height // 2
+        target_x = camera_x + (mouse_x - center_x) / block_size
+        target_y = camera_y - (mouse_y - center_y) / block_size
+        cell_x = int(math.floor(target_x))
+        cell_y = int(math.ceil(target_y))
+        if cell_y < 1:
+            return None
+
+        target_block = world.get_block(cell_x, cell_y)
+        if target_block is None:
+            return cell_x, cell_y
+
+        rel_x = target_x - (cell_x + 0.5)
+        rel_y = target_y - (cell_y - 0.5)
+        if abs(rel_x) > abs(rel_y):
+            return cell_x + (1 if rel_x >= 0 else -1), cell_y
+        return cell_x, cell_y + (1 if rel_y >= 0 else -1)
 
     # Zoom state
     block_size = DEFAULT_BLOCK_SIZE
@@ -322,6 +366,8 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
         keys = pygame.key.get_pressed()
         mouse_buttons = pygame.mouse.get_pressed()
         mx, my = pygame.mouse.get_pos()
+        hotbar_rect, hotbar_slot_size, hotbar_gap = hotbar_geometry()
+        mouse_over_hotbar = hotbar_rect.collidepoint(mx, my)
 
         pause_button_width = 220
         pause_button_height = 48
@@ -390,6 +436,11 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
                             current_mode = create_mode(
                                 requested_mode, player, world, textures, username
                             )
+                    continue
+                if pygame.K_1 <= event.key <= pygame.K_9:
+                    index = event.key - pygame.K_1
+                    if index < len(hotbar_blocks):
+                        selected_hotbar = index
                     continue
                 if event.key == pygame.K_ESCAPE:
                     paused = True
@@ -468,6 +519,9 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
             elif event.type == pygame.MOUSEWHEEL:
                 if chat.scroll(event.y):
                     continue
+                if mouse_over_hotbar and hotbar_blocks:
+                    selected_hotbar = (selected_hotbar - event.y) % len(hotbar_blocks)
+                    continue
                 if event.y > 0:
                     new_size = block_size * ZOOM_FACTOR
                     max_bs = max(min(screen_width, screen_height) / 2, DEFAULT_BLOCK_SIZE)
@@ -477,6 +531,33 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
                     new_size = block_size / ZOOM_FACTOR
                     if new_size >= MIN_BLOCK_SIZE:
                         block_size = max(int(new_size), MIN_BLOCK_SIZE)
+
+            elif (event.type == pygame.MOUSEBUTTONDOWN and event.button == 3
+                  and not paused and not chat.open and not mouse_over_hotbar
+                  and current_mode.name == CREATIVE
+                  and hotbar_blocks):
+                target = get_placement_target(event.pos[0], event.pos[1])
+                if target is None:
+                    continue
+                place_x, place_y = target
+                left, bottom, width, height = player.get_collision_rect()
+                # Compare in world coordinates to avoid camera offsets.
+                overlaps_player = (
+                    left < place_x + 1 and left + width > place_x
+                    and bottom - height < place_y and bottom > place_y - 1)
+                if not overlaps_player and world.place_block(
+                        place_x, place_y, hotbar_blocks[selected_hotbar]):
+                    log_event(f"Block Placed: user={username} x={place_x} y={place_y} "
+                              f"block={hotbar_blocks[selected_hotbar]}")
+                    save_world_state(username, world_name, player, world,
+                                     current_mode.name)
+
+            elif (event.type == pygame.MOUSEBUTTONDOWN and event.button == 1
+                  and hotbar_rect.collidepoint(event.pos) and hotbar_blocks):
+                slot = (event.pos[0] - hotbar_rect.x - 6) // (hotbar_slot_size + hotbar_gap)
+                slot_x = hotbar_rect.x + 6 + slot * (hotbar_slot_size + hotbar_gap)
+                if 0 <= slot < len(hotbar_blocks) and event.pos[0] < slot_x + hotbar_slot_size:
+                    selected_hotbar = slot
 
         # Real-time persistence: save on gamemode or debug change, plus periodic autosave
         if current_mode.name != last_mode_name:
@@ -542,9 +623,15 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
                 hovered_sy = int((camera_y - wy) * block_size + cy_off)
                 hovered_info = (wx, wy, bt)
 
+        placement_target = None
+        if (not paused and not chat.open and current_mode.name == CREATIVE
+                and hotbar_blocks and not mouse_over_hotbar):
+            placement_target = get_placement_target(mx, my)
+
         # Update current game mode (player physics, particles, block breaking)
         if not paused and not chat.open:
-            current_mode.update(dt, keys, mouse_buttons, mx, my, block_size, hovered_info)
+            if not mouse_over_hotbar:
+                current_mode.update(dt, keys, mouse_buttons, mx, my, block_size, hovered_info)
             if player.y < void_death_y:
                 player.health -= void_damage * (dt / 60.0)
                 if player.health <= 0:
@@ -564,9 +651,43 @@ def start_game(screen, screen_width, screen_height, username, lang, settings, wo
         world.render_blocks(camera_x, camera_y, screen_width, screen_height,
                             block_size, draw_block)
 
+        # Minecraft-style nine-slot hotbar.
+        if hotbar_blocks:
+            hotbar_rect, slot_size, gap = hotbar_geometry()
+            bar_x, bar_y = hotbar_rect.x, hotbar_rect.y
+            bar_width, bar_height = hotbar_rect.width, hotbar_rect.height
+            hotbar_img = gui_textures.get("hotbar")
+            if hotbar_img:
+                bar = pygame.transform.scale(hotbar_img, (bar_width, bar_height))
+                screen.blit(bar, (bar_x, bar_y))
+            else:
+                pygame.draw.rect(screen, (35, 35, 35),
+                                 (bar_x, bar_y, bar_width, bar_height))
+                pygame.draw.rect(screen, (180, 180, 180),
+                                 (bar_x, bar_y, bar_width, bar_height), 2)
+            for index, block_type in enumerate(hotbar_blocks):
+                slot_x = bar_x + 6 + index * (slot_size + gap)
+                slot_y = bar_y + 6
+                if index == selected_hotbar:
+                    pygame.draw.rect(screen, (255, 255, 255),
+                                     (slot_x - 2, slot_y - 2, slot_size + 4, slot_size + 4), 2)
+                slot_tex = get_texture_or_fallback(textures, block_type, slot_size - 8, color_map)
+                screen.blit(slot_tex, (slot_x + 4, slot_y + 4))
+
         if hovered_block:
             pygame.draw.rect(screen, HIGHLIGHT_COLOR,
                              (hovered_sx, hovered_sy, block_size, block_size),
+                             HIGHLIGHT_WIDTH)
+
+        if placement_target:
+            place_x, place_y = placement_target
+            place_sx = int((place_x - camera_x) * block_size + cx_off)
+            place_sy = int((camera_y - place_y) * block_size + cy_off)
+            preview = pygame.Surface((block_size, block_size), pygame.SRCALPHA)
+            preview.fill((255, 255, 255, 45))
+            screen.blit(preview, (place_sx, place_sy))
+            pygame.draw.rect(screen, (255, 255, 255),
+                             (place_sx, place_sy, block_size, block_size),
                              HIGHLIGHT_WIDTH)
 
         if hovered_block:
